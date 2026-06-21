@@ -1,0 +1,80 @@
+[project]
+name   = "Entity Core Protocol"
+slug   = "entity-core-protocol"
+repo   = "entity-core-protocol"
+github = "https://github.com/EntityChurch/entity-core-protocol"
+intro  = """
+The irreducible protocol every Entity peer must speak — the mandatory
+convergence layer (Layers 0-4): the ECF wire format, the native type system, the
+identity / capability / dispatch core, and the core tree operations (put/get). Two peers
+that agree on this interoperate at the substrate; everything above it (extensions, SDK,
+applications) is optional and lives in entity-system-architecture. The core profile
+(`--profile core`) is independently re-derived by 15 generated peers at 0-FAIL plus the
+Go / Rust / Python reference implementations.
+"""
+
+# ── Overview ──────────────────────────────────────────────────────────────────
+[[doc]]
+path  = "README.md"
+title = "Entity Core Protocol"
+blurb = "What entity-core-protocol is and where it sits in the stack — the convergence floor every peer speaks."
+group = "Overview"
+
+[[doc]]
+path  = "specs/test-vectors/crypto-agility/README.md"
+title = "Crypto-Agility Conformance Vectors"
+blurb = "Phase 1 (allocation + machinery) and Phase 2 (cross-key / cross-hash matrix) are byte-pinned cross-impl in agility-vectors-v1.diag, with the seed convention in"
+group = "Overview"
+
+# ── Protocol specs ────────────────────────────────────────────────────────────
+[[doc]]
+path  = "specs/ENTITY-CBOR-ENCODING.md"
+title = "Entity CBOR Encoding Specification"
+blurb = "This specification defines the encoding format for the Entity Core Protocol."
+group = "Protocol specs"
+
+[[doc]]
+path  = "specs/ENTITY-CORE-PROTOCOL.md"
+title = "Entity Core Protocol — Normative Specification"
+blurb = "The normative protocol: entity model, addressing, native types, connection/auth, capabilities, and dispatch (Layers 0-4)."
+group = "Protocol specs"
+
+[[doc]]
+path  = "specs/ENTITY-NATIVE-TYPE-SYSTEM.md"
+title = "Entity-Native Type System Specification"
+blurb = "This specification defines the entity-native type system for the Entity Core Protocol."
+group = "Protocol specs"
+
+# ── Reference ─────────────────────────────────────────────────────────────────
+[[doc]]
+path  = "specs/ENTITY-CORE-MACHINE-SPEC.md"
+title = "Entity Core Protocol — Implementation Specification"
+blurb = "Entity := { type: string, data: any, contenthash: bytes }"
+group = "Reference"
+
+# ── Authoring standards ───────────────────────────────────────────────────────
+[[doc]]
+path  = "specs/SPECIFICATION-FORMAT.md"
+title = "Entity System — Normative Specification Format"
+blurb = "This document defines the format for normative specifications in the entity system."
+group = "Authoring standards"
+
+[[doc]]
+path  = "specs/STYLE-NAMING-CONVENTIONS.md"
+title = "Entity System — Identifier Naming Conventions"
+blurb = "These names are part of the wire contract."
+group = "Authoring standards"
+
+# ── Roadmap ───────────────────────────────────────────────────────────────────
+[[doc]]
+path  = "ROADMAP-CORE-PROTOCOL.md"
+title = "Core Protocol — Domain Roadmap (canonical, living)"
+blurb = "Core-protocol maturity (the M0-M6 ladder), the version line, and forward work (V8 cutover, hardening)."
+group = "Roadmap"
+
+# ── Test vectors ──────────────────────────────────────────────────────────────
+[[doc]]
+path  = "specs/test-vectors/crypto-agility/agility-SEEDS.md"
+title = "Crypto-Agility Conformance Corpus — Seed Pins"
+blurb = "Phase 1 values are byte-equal cross-impl; Phase 2 uses the pinned-seed scheme in §2."
+group = "Test vectors"

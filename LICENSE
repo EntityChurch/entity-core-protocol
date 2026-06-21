@@ -1,0 +1,26 @@
+Creative Commons Attribution-NoDerivatives 4.0 International (CC BY-ND 4.0)
+
+Copyright 2026 the entitychurch contributors
+
+This license applies to the SPECIFICATION PROSE in this repository (the text you
+read). You are free to share and redistribute it in any medium or format, for any
+purpose, including commercially, under the following terms:
+
+  - Attribution — You must give appropriate credit and indicate if changes were
+    made.
+  - NoDerivatives — If you remix, transform, or build upon the material, you may
+    not distribute the modified material.
+
+If you believe the specification is wrong or incomplete, bring the change here
+through the proposal process (see CONTRIBUTING.md) rather than publishing a
+modified version.
+
+The full legal text is at:
+https://creativecommons.org/licenses/by-nd/4.0/legalcode
+
+NOTE ON MACHINE-READABLE FILES: schemas, IDL, and test vectors in this repository
+are functionally code and are licensed under Apache-2.0, not CC-BY-ND. See
+LICENSE-CODE for that text. Implement against them freely.
+
+"Entity Core" and related names are trademarks of the entitychurch contributors;
+trademark use is governed separately from this copyright license.
