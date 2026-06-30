@@ -78,3 +78,10 @@ path  = "specs/test-vectors/crypto-agility/agility-SEEDS.md"
 title = "Crypto-Agility Conformance Corpus — Seed Pins"
 blurb = "Phase 1 values are byte-equal cross-impl; Phase 2 uses the pinned-seed scheme in §2."
 group = "Test vectors"
+
+# ── Status ────────────────────────────────────────────────────────────────────
+[[doc]]
+path  = "docs/status/STATUS.md"
+title = "Status"
+blurb = "Current project status — where the project is, recent work, backlog, and what's next."
+group = "Overview"

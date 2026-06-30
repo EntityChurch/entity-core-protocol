@@ -95,8 +95,9 @@ and AGENTS-STANDARD §"Respect the protocol".
 - `LICENSE` (prose), `LICENSE-CODE` (Apache-2.0), `NOTICE` — dual-license files.
 - `AGENTS-STANDARD.md` + `AGENTS.md` + `CLAUDE.md` — agent guidance.
 
-There is no `docs/`, `status/`, `Makefile`, or source tree here — this is a
-specification repo. _(Build/test verbs: not applicable — no toolchain in this repo.)_
+There is no `Makefile` or source tree here — this is a specification repo. The only
+non-spec tree is `docs/status/`, the ephemeral dated status / handoff area.
+_(Build/test verbs: not applicable — no toolchain in this repo.)_
 
 ## Commit & PR
 
