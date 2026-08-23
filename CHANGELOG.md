@@ -9,6 +9,42 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 - Initial public research-preview release.
 
+### Changed — the `system/peer` identity entity is pinned to the ECFv1-SHA-256 floor (v7.77)
+
+**No wire renumber, no new opcode** — the locked wire core is untouched ([ADR-0002]). Routed by core-go
+(`a2a4ccf`, with two green tests) after arch's `SPECIFICATION-FORMAT.md` §8.4.6 pinned `{peer_id_hex}` to the
+floor while leaving the identity entity on its author's home format. **Those two halves are unsatisfiable off
+the floor**: `{peer_id_hex}` is simultaneously a path segment and an identity-reference equality operand, and
+§1.8 / §4.5a ruled the two roles in opposite directions. Pinning only the path segment produces **two
+`content_hash`es for one identity** — the state §1.8 exists to prevent — and turns capability-grant
+verification into `401` on any non-floor connection.
+
+- **§4.5a item 1a (new, normative).** The `system/peer` entity a peer presents is authored under ECFv1-SHA-256
+  unconditionally, whatever the connection's active format and whatever the peer's home format. It is the one
+  wire/identity-surface entity with **no author-chosen content** — its data is wholly recoverable from the
+  public peer-id — so every consumer derives its hash rather than fetching it.
+- **§4.5a item 1** no longer lists the identity entity among entities following the active format; **item 4**
+  now states that identity-equality holds *across* connections, not only within one, and that one derivation
+  function is the conformant shape.
+- **§1.8** — the authored identity hash and the floor-derived hash are now the same bytes by construction, so
+  "MUST NOT recompute" stops being a coincidence preserved per-connection and becomes an identity. **The
+  prohibition is unchanged and unweakened**; it simply can no longer contradict §8.4.6's derivation.
+- **§1.2** — one named exception to "a peer's persistent state is uniformly its home format."
+
+**What this deliberately does not do:** it does not make the floor mandatory for peers. A non-floor **home**
+format stays fully runnable — §1.2 still governs all stored content, §4.5a still governs envelope framing,
+capabilities and signatures. Exactly one entity type, of three public fields, is pinned. The alternative
+(promote §8.4.6's "effectively mandatory" prose to a `[MUST]` on peers) was **rejected**: it retires
+`hash_formats` negotiation as a live wire surface and makes any non-floor conformance arm illegal by
+construction rather than merely divergent.
+
+### Fixed — the §3.9 type registry carried two superseded type strings
+
+`ENTITY-CORE-MACHINE-SPEC.md` §3.9 still defined `system/protocol/inbox/{delivery,notification}` after both
+renames were ratified 2026-08-10 in `EXTENSION-INBOX.md` §2.1 / `EXTENSION-SUBSCRIPTION.md` §2.2. Renamed, and
+the block is now marked as a **reproduction** with its canonical home named — nothing gates spec-to-spec, so
+this surfaced by reading (core-go `31cd2b3`) and would have kept not-failing.
+
 ### Changed — spec amendment 0.8.1 (keystone cross-substrate hardening, before-freeze)
 
 Surfaced by the `entity-core-keystone` cross-substrate conformance sweep (findings F31–F48 + the RT-/W hand-offs).

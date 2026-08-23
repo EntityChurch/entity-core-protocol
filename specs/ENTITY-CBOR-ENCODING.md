@@ -340,7 +340,7 @@ digest = *OCTET                  ; length determined by format
 
 **Example (ecfv1-sha256):**
 ```cbor
-; 33 bytes total: 1 byte code + 32 bytes digest
+; 33 bytes total under SHA-256: 1 byte code + 32 bytes digest
 h'00 7a3b9c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890'
  │  └──────────────────────────────┬─────────────────────────────────┘
  │                               Digest (32 bytes)
@@ -445,16 +445,35 @@ envelope = {
 entity = {
   "type": text,
   "data": any,
-  "content_hash": hash-bytes                  ; 33 bytes (see §4.5)
+  "content_hash": hash-bytes                  ; see §4.5
 }
 
-hash-bytes = bytes                            ; format-code (1 byte) + digest (32 bytes)
+hash-bytes = bytes                            ; format-code + digest; LENGTH DETERMINED BY
+                                              ;   THE FORMAT CODE (§4.5), never fixed
 ```
 
 **Wire format details:**
-- `content_hash`: CBOR byte string, 33 bytes (format code 0x00 + 32-byte SHA-256 digest)
+- `content_hash`: CBOR byte string — format code followed by digest, **its length determined by the format code** per §4.5 and the §4.3 registry (33 bytes under `0x00` ecfv1-sha256, 49 under `0x01` ecfv1-sha384). A CBOR byte string is self-delimiting, so no decoder needs the length in advance.
 - `included` keys: CBOR byte strings (same format as content_hash)
 - See §4.5 for hash wire encoding specification
+
+> **Corrected 2026-08-10 — this block restated §4.5 as "33 bytes" and thereby contradicted it.** §4.5 has always been correct (`digest = *OCTET ; length determined by format`); the restatement froze one registry entry's width into the **wire-format section, which is where implementers read it.** A stale in-document restatement is the same hazard as a derived document restating a spec (`SPECIFICATION-FORMAT.md` §8.4.3): it looks authoritative and gets read instead of the source. **This is the root instance of the width-lock class** now barred corpus-wide by `SPECIFICATION-FORMAT.md` §8.4.5 — the extension-layer instances (NETWORK §6.5.3.1, SIGNALING §6.3, RELAY §3.1/§5, TREE §3.2, REGISTRY §5.1) all restate this shape. **The normative rule at §4.5 is unchanged**; this aligns the restatement with it, so it is a correction, not a wire change.
+
+---
+
+## 5.4 Entity Fidelity
+
+> **Relocated verbatim from `ENTITY-CORE-MACHINE-SPEC.md` §1.8 on 2026-08-10, and this is now its canonical home.** The machine-spec is a **derived** document (`SPECIFICATION-FORMAT.md` §8.4.3) scheduled for retirement, but §1.8 is **not** derived content — it is the receive/forward byte-preservation contract, one of the five load-bearing invariants, cited by name in two implementations' conformance validators. It is moved here first, and separately, because **deleting the machine-spec before relocating it would orphan a normative contract that live code depends on.** Its own conformance already routed to this document's Appendix E, which is why this is the home. Citations of `ENTITY-CORE-MACHINE-SPEC.md §1.8` remain resolvable until the cohort repoints them; **the machine-spec MUST NOT be deleted until they are.**
+
+1. Validate hash on receipt (compute from {type, data}, compare)
+2. Trust validated hash thereafter — MUST NOT recompute
+3. Store original bytes
+4. Forward original — MUST NOT re-serialize
+5. SHOULD preserve unknown fields
+
+**Property vs. mechanism (clarification).** The cross-impl-observable property is: *a forwarded entity re-presents the exact bytes that hash to its validated content hash, and all received content — known fields, unknown fields, CBOR tags, null-vs-absent — survives the round-trip.* Steps 3–4 (store original bytes, forward without re-serializing) are the **unconditionally robust** mechanism for guaranteeing it. An implementation MAY instead carry the validated hash (step 2) and re-encode canonically on forward **iff** (a) receipt validation is a strict ECF re-encode-and-compare — so an accepted entity's canonical encoding provably equals its received bytes — and (b) its parsed representation is lossless at every nesting level, so the re-encode reproduces unknown content. Under (a)+(b) the re-encode is byte-faithful and the property holds. What an implementation MUST NOT do is recompute the hash from a *lossy* parse without carrying the validated hash: that silently diverges the moment encoding is non-deterministic across impls/versions or an unmodeled (forward-compatibility) field appears — the exact hazard this contract exists to prevent. Carrying the validated hash (step 2) is required either way; raw-byte storage vs. lossless-parse-plus-canonical-re-encode is an implementation choice.
+
+Conformance of the mechanism (whichever an implementation chooses) is verified by the test-vector appendix in Appendix E of this document. Re-encode-and-compare implementations MUST additionally verify that round-tripping each `encode_equal` vector's `canonical` bytes through their decoder and re-encoder produces byte-identical output — the (a) precondition above made testable.
 
 ---
 
@@ -1122,7 +1141,7 @@ Entity Core choice rationale: Preserving unknown tags enables application-specif
 {
   "type": "example",
   "data": {
-    "parent": h'00abc123...'               ; system/hash — flat bstr (33 bytes)
+    "parent": h'00abc123...'               ; system/hash — flat bstr (33 bytes under SHA-256)
   }
 }
 ```

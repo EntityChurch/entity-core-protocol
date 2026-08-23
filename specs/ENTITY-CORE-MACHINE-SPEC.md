@@ -25,7 +25,7 @@ system/hash := bytes  ; format_code(1) + digest(N)
 content_hash(entity):
   encoded = ecf_encode({type: entity.type, data: entity.data})
   digest = SHA256(encoded)
-  return bytes([0x00]) + digest    ; 33 bytes
+  return bytes([0x00]) + digest    ; 33 bytes under SHA-256
 
 hash_equals(a, b):
   return a == b                    ; byte-wise
@@ -68,7 +68,7 @@ Base58 alphabet: `123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz`
 
 ```
 sign_entity(entity, private_key):
-  return ed25519_sign(private_key, entity.content_hash)   ; sign full 33 bytes
+  return ed25519_sign(private_key, entity.content_hash)   ; sign the full hash under SHA-256, 33 bytes
 
 verify_entity_signature(entity, public_key, signature_bytes):
   return ed25519_verify(public_key, entity.content_hash, signature_bytes)
@@ -94,6 +94,18 @@ Content Store: hash → entity  ; immutable, deduplicated
 Path may be simultaneously bound to entity AND have child paths. No file-or-directory constraint.
 
 ### 1.8 Entity Fidelity
+
+> **⚠ RELOCATED 2026-08-10 — the canonical home is now `ENTITY-CBOR-ENCODING.md` §5.4.** The text below is a
+> **derived copy** and is no longer authoritative (`SPECIFICATION-FORMAT.md` §8.4.3: never measure conformance
+> against a derived document). **Cite `ENTITY-CBOR-ENCODING.md` §5.4 in new work; edit §5.4, never this copy.**
+>
+> This copy is retained *only* so the existing citations of `ENTITY-CORE-MACHINE-SPEC.md §1.8` — in
+> `entity-core-go` (2 validator declarations), `entity-core-rust` (`core/protocol/src/verify.rs`),
+> `entity-core-keystone`, `entity-core-formalization`, and two arch documents — keep resolving until their
+> owners repoint them. **This file's retirement is blocked on that repoint and on nothing else**: §1.8 was the
+> only non-derived section in it (its §3 re-declares 38 types owned by other specs, and once cost a full audit
+> cycle in false "drift" findings). When the citations are repointed, delete the file and drop its
+> `spec-tool/config.default.toml` entry.
 
 1. Validate hash on receipt (compute from {type, data}, compare)
 2. Trust validated hash thereafter — MUST NOT recompute
@@ -183,7 +195,7 @@ primitive/bool    := { name: "primitive/bool" }                      ; CBOR true
 primitive/null    := { name: "primitive/null" }                      ; CBOR null
 primitive/any     := { name: "primitive/any" }                       ; any CBOR
 
-system/hash       := { name: "system/hash", extends: "primitive/bytes" }  ; 33 bytes (0x00 + SHA-256)
+system/hash       := { name: "system/hash", extends: "primitive/bytes" }  ; 33 bytes under SHA-256 (0x00 + SHA-256)
 system/tree/path  := { name: "system/tree/path", extends: "primitive/string" }  ; tree location
 system/type/name  := { name: "system/type/name", extends: "primitive/string" }  ; type identifier
 system/peer-id := { name: "system/peer-id", extends: "primitive/string" }  ; peer identity
@@ -620,8 +632,16 @@ Merge strategies: `no-overwrite` (default), `source-wins`, `target-wins`. Merge 
 
 ### 3.9 Inbox & Subscription Types
 
+> **Reproduction, not the canonical home.** Both types are **extension-owned** and defined canonically in
+> `EXTENSION-INBOX.md` §2.1 (`system/inbox/delivery`) and `EXTENSION-SUBSCRIPTION.md` §2.2
+> (`system/subscription/notification`). They are reproduced here because this registry is what a generator
+> reads. **Change them there; update this reproduction to match.** *(Both strings were renamed and ratified
+> 2026-08-10 — stripping the mis-homing `protocol/` prefix, `SPECIFICATION-FORMAT.md` §8.4.2 — and this
+> registry kept the old names for one packet, because the ratification edited the extension specs and nothing
+> gates spec-to-spec. core-go found it by reading; nothing would have failed.)*
+
 ```
-system/protocol/inbox/delivery := {
+system/inbox/delivery := {
   fields: {
     original_request_id: {type_ref: "primitive/string"},
     status:              {type_ref: "primitive/uint"},
@@ -629,7 +649,7 @@ system/protocol/inbox/delivery := {
   }
 }
 
-system/protocol/inbox/notification := {
+system/subscription/notification := {
   fields: {
     subscription_id: {type_ref: "primitive/string"},
     event:           {type_ref: "primitive/string"},

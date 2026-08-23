@@ -49,12 +49,12 @@ envelope := {
       params: {
         type: "system/tree/get-request",
         data: {},
-        content_hash: h'00...'                     ; 33 bytes
+        content_hash: h'00...'                     ; 33 bytes under SHA-256
       },
-      author: h'00...',                            ; system/hash (33 bytes)
-      capability: h'00...'                         ; system/hash (33 bytes)
+      author: h'00...',                            ; system/hash (33 bytes under SHA-256)
+      capability: h'00...'                         ; system/hash (33 bytes under SHA-256)
     },
-    content_hash: h'00...'                         ; 33 bytes
+    content_hash: h'00...'                         ; 33 bytes under SHA-256
   },
   included: {
     h'00...': {                                    ; key = content_hash (bytes)
@@ -117,7 +117,7 @@ The format code encodes both the canonical encoding version and the hash functio
 content_hash(entity):
   encoded = ecf_v1_encode({type: entity.type, data: entity.data})
   digest = SHA256(encoded)
-  return bytes([0x00]) + digest    ; 33 bytes
+  return bytes([0x00]) + digest    ; 33 bytes under SHA-256
 ```
 
 - Input: `{type, data}` only. `content_hash` itself is NOT hashed.
@@ -137,7 +137,7 @@ The `content_hash` address space is the tuple `(format_code, digest)`: the forma
 
 **Varint expansion (normative, v7.67).** The integer value `255` is reserved on both the `content_hash_format` axis (this section) and the `key_type` axis (§1.5) and SHALL NOT be allocated as an algorithm code. Encodings with leading-byte value `≥ 0x80` are normal multi-byte LEB128 sequences per §7.3 and implementations MUST decode them correctly even when no current production allocation exceeds `0x7F`.
 
-**Peer home (content) format.** The content store is an address space keyed by `(content_hash_format, digest)`. A peer authors its own content — stored entities, trie nodes, revision entries, handler-produced results, and **all derived/substrate state it persists (blobs, indexes, derived paths, content-store entries)** — under its **home format**, a deployment property defaulting to `content_hash_format = 0x00` (SHA-256, the §9.1 conformance floor). A peer's persistent state is **uniformly** its home format; authoring substrate under the *negotiated-active* format of whatever connection happened to write it (so that the same logical content lands at two hashes) is **non-conformant**. Per-connection wire/identity-surface entities still follow the active format (§4.5a); that is a separate surface. A peer MAY select a different validated home format; doing so places that peer's content in a **distinct address space** that does not dedup or converge with the SHA-256 space (or any other format's space) — content addressing's shared-space benefits (dedup, convergence, the universal tree) hold only *within* one format. The home format is distinct from a connection's **active format** (§4.5): the active format governs the per-connection wire/identity surface and is negotiated; the home format governs where the peer's content lives and is the peer's own choice. A single-format network (all peers one home format) shares one content address space and is the recommended deployment; mixing home formats across peers is the experimental two-address-space mode (§1.2a, §1.5).
+**Peer home (content) format.** The content store is an address space keyed by `(content_hash_format, digest)`. A peer authors its own content — stored entities, trie nodes, revision entries, handler-produced results, and **all derived/substrate state it persists (blobs, indexes, derived paths, content-store entries)** — under its **home format**, a deployment property defaulting to `content_hash_format = 0x00` (SHA-256, the §9.1 conformance floor). A peer's persistent state is **uniformly** its home format, with **one named exception** — the peer's own `system/peer` identity entity, which is authored and stored at the ECFv1-SHA-256 floor whatever the home format (§4.5a item 1a). Authoring substrate under the *negotiated-active* format of whatever connection happened to write it (so that the same logical content lands at two hashes) is **non-conformant**. Per-connection wire/identity-surface entities still follow the active format (§4.5a); that is a separate surface. A peer MAY select a different validated home format; doing so places that peer's content in a **distinct address space** that does not dedup or converge with the SHA-256 space (or any other format's space) — content addressing's shared-space benefits (dedup, convergence, the universal tree) hold only *within* one format. The home format is distinct from a connection's **active format** (§4.5): the active format governs the per-connection wire/identity surface and is negotiated; the home format governs where the peer's content lives and is the peer's own choice. A single-format network (all peers one home format) shares one content address space and is the recommended deployment; mixing home formats across peers is the experimental two-address-space mode (§1.2a, §1.5).
 
 ### 1.2a Content format: standard compliance and the price of divergence
 
@@ -511,7 +511,7 @@ Implementations MUST maintain fidelity throughout the system:
 4. **Forward original**: When re-transmitting, use stored original. MUST NOT re-serialize.
 5. **Preserve unknown fields**: SHOULD preserve fields not understood. Enables forward compatibility and valid signatures through relay.
 
-**Application — identity references.** A reference to another peer's identity (a cap `grantee`/`granter`, a `signature.signer`, any `system/hash` naming a `system/peer`) is the *authored* `content_hash` of that identity entity — the form its keyholder presents on the wire (carried as `signature.signer` during the handshake, §4.6). An implementation constructing such a reference MUST use that authored hash and MUST NOT recompute the identity entity's hash under its own `content_hash_format`. Under §4.5a there is one active format per connection, so the authored form and the local form coincide; the prohibition is the safety rail that keeps them coincident and is the direct consequence of item 2 ("trust validated hash … MUST NOT recompute from internal structures"). Re-deriving a received identity under the local format manufactures a second content_hash for one identity and breaks the §5.2 `grantee == author` / `signer == author` equality.
+**Application — identity references.** A reference to another peer's identity (a cap `grantee`/`granter`, a `signature.signer`, any `system/hash` naming a `system/peer`) is the *authored* `content_hash` of that identity entity — the form its keyholder presents on the wire (carried as `signature.signer` during the handshake, §4.6). An implementation constructing such a reference MUST use that authored hash and MUST NOT recompute the identity entity's hash under its own `content_hash_format`. Under §4.5a item 1a the `system/peer` identity entity is authored at the **ECFv1-SHA-256 floor unconditionally**, so the authored form and the floor-derived form are **the same bytes on every connection** — not a per-connection coincidence to be preserved, but an identity. The prohibition is therefore not in tension with deriving an identity hash from a peer-id in order to build a `{peer_id_hex}` path segment (`SPECIFICATION-FORMAT.md` §8.4.6): both routes yield one value. It remains the direct consequence of item 2 ("trust validated hash … MUST NOT recompute from internal structures"), and it still binds every *other* entity: re-deriving a received identity under the local format manufactures a second content_hash for one identity and breaks the §5.2 `grantee == author` / `signer == author` equality.
 
 ### 1.9 Namespace Design
 
@@ -631,7 +631,7 @@ Type checking is strict: `primitive/bool` rejects integers 0/1. `primitive/int` 
 `system/hash` is `primitive/bytes` — a flat byte string on the wire (CBOR bstr). The first byte is the format code (§1.2); the remaining bytes are the raw digest.
 
 ```
-system/hash := primitive/bytes   ; 33 bytes for ecfv1-sha256 (code 0x00)
+system/hash := primitive/bytes   ; 33 bytes under SHA-256 for ecfv1-sha256 (code 0x00)
 ```
 
 This is a core type used throughout the protocol for content addressing and entity references. All hash values — `content_hash` fields, `included` map keys, and entity references in data — use the same flat byte representation.
@@ -1769,10 +1769,12 @@ Two negotiation shapes apply, because the fields differ in whether they are **id
 
 The `hash_formats` negotiation (§4.5) selects one **active `content_hash_format`** per connection. For the lifetime of that connection:
 
-1. Every entity a peer authors **on the wire/identity surface** for transmission on this connection — the EXECUTE and EXECUTE_RESPONSE envelope framing, the capabilities it mints for this connection, signatures, and the identity entity it presents — MUST be content-hashed under the active format. This is the surface where identity-equality (`grantee == author`, `signer == author`; §5.2) is evaluated; keeping it single-format per connection is what makes that equality byte-exact.
+1. Every entity a peer authors **on the wire/identity surface** for transmission on this connection — the EXECUTE and EXECUTE_RESPONSE envelope framing, the capabilities it mints for this connection, and signatures — MUST be content-hashed under the active format. This is the surface where identity-equality (`grantee == author`, `signer == author`; §5.2) is evaluated; keeping it single-format per connection is what makes that equality byte-exact.
+
+   **1a. Exception — the `system/peer` identity entity is pinned to the floor (normative, v7.77).** The identity entity a peer presents (§4.6's `peer_entity`) is authored under **ECFv1-SHA-256 (`0x00`) unconditionally** — on every connection, whatever the active format, and whatever the peer's home format. It is the one entity on this surface with **no author-chosen content**: its data is `{peer_id, public_key, key_type}`, wholly recoverable from the public peer-id, so every consumer *derives* its hash rather than fetching it — a `[derive-to-meet]` value by `SPECIFICATION-FORMAT.md` §8.4.6's test. Pinning it does not weaken this item's purpose, it **over-satisfies** it: the identity hash becomes the same bytes on every connection in the network rather than merely within one, so `signature.signer`, cap `grantee`/`granter`, and the `{peer_id_hex}` path segment are **one value** instead of two that coincide only while the active format happens to be the floor. This is the single exception to §1.2's "a peer's persistent state is uniformly its home format" — a non-floor-home peer stores its own `system/peer` entity at its floor hash, and nothing else changes.
 2. A peer MUST NOT author a **wire/identity-surface** entity under a format outside the negotiated active value. **Content entities** (handler-produced results, stored data, tree nodes, async-delivery and subscription-notification bodies) are NOT required to be re-authored under the active format — they carry their own home-format (§1.2) `content_hash` and travel self-describing; the receiver validates them by their declared format byte. When the sender's home format differs from the connection active format, such content does not converge with the receiver's same-logical-input content (the §1.2 / §1.5 two-address-space case); this is expected, not an error.
 3. **Relay carve-out.** An entity a peer *received earlier* under a different format and is merely *relaying* by reference follows §1.8 fidelity — it is forwarded as its original bytes, never re-authored. Relaying such a reference *across a connection whose active format differs* is the cross-content-address-space case, out of v1 scope per §1.5 (a translator handler's concern, not core's).
-4. Consequently, **within a single connection there is exactly one `content_hash_format` in play** for authored traffic, and identity-equality comparisons (`grantee == author`, `signer == author`; §5.2) remain correct as byte-wise hash equality (§5.3). A peer MUST NOT re-derive a *received* identity's `content_hash` under a different (e.g. its own preferred) format in order to construct a reference to that identity — doing so manufactures a second form and breaks the equality (§1.8).
+4. Consequently, **within a single connection there is exactly one `content_hash_format` in play** for authored traffic, and identity-equality comparisons (`grantee == author`, `signer == author`; §5.2) remain correct as byte-wise hash equality (§5.3). A peer MUST NOT re-derive a *received* identity's `content_hash` under a different (e.g. its own preferred) format in order to construct a reference to that identity — doing so manufactures a second form and breaks the equality (§1.8). **With item 1a in force this holds across connections, not only within one:** an identity reference derived at the floor and one read off the wire are the same bytes, so the prohibition and the derivation can no longer disagree. An implementation that derives an identity hash for a path segment and compares an authored identity hash for an equality check is using **one** function, and that is the conformant shape — two functions is the defect item 1a exists to prevent.
 5. **Cap chains do not cross format boundaries in v1.** A cap chain has a self-consistent `content_hash_format` (§5.5 freeze). Combined with item 2, a chain authored under format X cannot be transmitted on a connection whose active format is Y ≠ X. A peer that mints persistent caps under its home format and then connects to a peer that negotiates a *different* active format MUST mint **fresh** chains under the connection's active format for that peer — a persistent-cap cache does not traverse a format downgrade.
 
 Two peers whose `hash_formats` sets are **disjoint** cannot establish a connection (empty intersection → reject, §4.7). A peer that wishes to interoperate broadly SHOULD advertise every format it supports. The active format is a **property of the connection**, not of a peer: a peer that prefers SHA-384 negotiates **down** to SHA-256 with a SHA-256-only peer and authors SHA-256 on that connection.
@@ -3822,7 +3824,7 @@ content_hash(entity):
   hashable = {type: entity.type, data: entity.data}
   encoded = ecf_encode(hashable)
   digest = SHA256(encoded)
-  return bytes([0x00]) + digest    ; 33 bytes: format code + digest
+  return bytes([0x00]) + digest    ; 33 bytes under SHA-256: format code + digest
 ```
 
 ### 7.2 Content Hash Validation — NORMATIVE

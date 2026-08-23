@@ -1021,10 +1021,10 @@ Entity references are `system/hash` byte strings stored directly in the `data` f
     "operation": "...",
     "resource": {"targets": ["..."]},  ; optional — resource target scope for authorization
     "params": {...},
-    "author": h'00...',        ; system/hash (33 bytes)
-    "capability": h'00...'     ; system/hash (33 bytes)
+    "author": h'00...',        ; system/hash (33 bytes under SHA-256)
+    "capability": h'00...'     ; system/hash (33 bytes under SHA-256)
   },
-  "content_hash": h'00...'    ; system/hash (33 bytes)
+  "content_hash": h'00...'    ; system/hash (33 bytes under SHA-256)
 }
 ```
 
