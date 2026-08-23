@@ -7,12 +7,39 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+*(Nothing yet. Post-release work lands here.)*
+
+---
+
+## [0.8.2] — 2026-08-22
+
+> **Not yet tagged.** The version headers were cut on 2026-08-21; the published surface then moved
+> again on 2026-08-22 (the corpus de-version below), so this section describes the tree at that
+> later point and is dated accordingly. `v0.8.2` does not exist as a tag — a tag is the release
+> ([ADR-0015]) — and whatever commit carries it is what these notes must match.
+
+**The research-preview release.** `ENTITY-CORE-PROTOCOL.md` **`Version: 0.8.2`**; the encoding and
+type-system companions ship at their own labels, **`ENTITY-CBOR-ENCODING.md` 1.5** and
+**`ENTITY-NATIVE-TYPE-SYSTEM.md` 4.2.1**, which are unchanged in normative content since the last
+snapshot and differ only by correction and cross-reference repair.
+
+**The locked wire core is untouched** — no renumber, no new opcode, no new status code ([ADR-0002]).
+Everything below is either a rule that was always implied and is now stated, or a correction to text
+that contradicted a neighbouring section.
+
+**Versioning note, so the sequence reads correctly.** Development after `0.8.0` ran under an
+arch-managed fourth component (`0.8.0.1`) whose only job is to signal to the implementation cohort
+that core text moved without an agent inventing a release number. **That component is stripped at
+release, which is this.** Three normative rules in §5.2's dispatch pseudocode carry inline
+`(normative, 0.8.2)` tags — those were written ahead of the version, not left behind by it, and they
+are correct as of this release.
+
 - Initial public research-preview release.
 
 ### Changed — the `system/peer` identity entity is pinned to the ECFv1-SHA-256 floor (v7.77)
 
 **No wire renumber, no new opcode** — the locked wire core is untouched ([ADR-0002]). Routed by core-go
-(`a2a4ccf`, with two green tests) after arch's `SPECIFICATION-FORMAT.md` §8.4.6 pinned `{peer_id_hex}` to the
+(with two green tests) after arch's `SPECIFICATION-FORMAT.md` §8.4.6 pinned `{peer_id_hex}` to the
 floor while leaving the identity entity on its author's home format. **Those two halves are unsatisfiable off
 the floor**: `{peer_id_hex}` is simultaneously a path segment and an identity-reference equality operand, and
 §1.8 / §4.5a ruled the two roles in opposite directions. Pinning only the path segment produces **two
@@ -38,12 +65,35 @@ capabilities and signatures. Exactly one entity type, of three public fields, is
 `hash_formats` negotiation as a live wire surface and makes any non-floor conformance arm illegal by
 construction rather than merely divergent.
 
+### Changed — the test-vector corpus is de-versioned; the crypto-agility corpus has one copy
+
+`specs/test-vectors/v767/` is **deleted**. The crypto-agility corpus had two committed copies — a
+working copy stamped for spec revision v7.67 and a de-versioned publish form — and they collapse
+into `specs/test-vectors/crypto-agility/`. `agility-SEEDS.md` → `SEEDS.md`;
+`agility-vectors-v1.{diag,cbor}` → `agility-vectors.{diag,cbor}`.
+
+**No vector value changed and the artifact did not move** —
+`b5484e84dd2cddfa7d3cc8a041deba92cb29615aedb2180e31d8b6910ac5b648`, 10874 B, before and after. A
+corpus is now identified by **its name and its artifact's sha256**, never by a version stamp; the
+history that a filename integer pretended to carry lives in `crypto-agility/CHANGELOG.md`, added
+here. The corpus-process rules that had accumulated in the working copy's `SEEDS.md` land as
+`GUIDE-CONFORMANCE` §5.1a–§5.1d, where procedure belongs.
+
+The second copy was the drift surface, not protection against it: the two copies diverged four
+separate ways in one week. What replaces the `.cbor` byte-identity invariant is the
+source-produces-artifact gate, which is the check that actually catches drift.
+
+**`test-vectors/ecf-conformance/conformance-vectors-v1.*` deliberately keeps its `-v1` stamp** in
+this release. Appendix E of `ENTITY-CBOR-ENCODING.md` states the corpus-version citation rule
+normatively and independently, so retiring the stamp there is a normative core-spec edit that no
+proposal yet covers. Tracked; it does not ship half-done.
+
 ### Fixed — the §3.9 type registry carried two superseded type strings
 
 `ENTITY-CORE-MACHINE-SPEC.md` §3.9 still defined `system/protocol/inbox/{delivery,notification}` after both
 renames were ratified 2026-08-10 in `EXTENSION-INBOX.md` §2.1 / `EXTENSION-SUBSCRIPTION.md` §2.2. Renamed, and
 the block is now marked as a **reproduction** with its canonical home named — nothing gates spec-to-spec, so
-this surfaced by reading (core-go `31cd2b3`) and would have kept not-failing.
+this surfaced by reading, in core-go, and would have kept not-failing.
 
 ### Changed — spec amendment 0.8.1 (keystone cross-substrate hardening, before-freeze)
 
@@ -69,7 +119,7 @@ Surfaced by the `entity-core-keystone` cross-substrate conformance sweep (findin
 - **RT-14 (§3.5):** lowercase-hex in **any** tree path segment is a general MUST (path segments case-sensitive). Generalizes a rule that previously bound only chain-participating caps; needs-check cohort-wide.
 
 **F37 (type-system) — RESOLVED 2026-07-27 to the core name `system/peer-id` (spec repair; a conformant peer passes
-unchanged).** F37's first pass (`7558cc4`) had repointed the two dangling `system/peer.peer_id` refs to
+unchanged).** F37's first pass (the cross-substrate hardening fold) had repointed the two dangling `system/peer.peer_id` refs to
 `system/identity/peer-id`, matching the type system's own (mis-placed) definition — but `system/identity/` is the
 **EXTENSION-IDENTITY** namespace, and `peer-id` is a **core** protocol primitive (bootstrap type #14, used in the
 connect handshake before any extension loads). Placing a core type under an extension's namespace was the error;
