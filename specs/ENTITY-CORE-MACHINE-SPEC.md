@@ -186,7 +186,7 @@ primitive/any     := { name: "primitive/any" }                       ; any CBOR
 system/hash       := { name: "system/hash", extends: "primitive/bytes" }  ; 33 bytes (0x00 + SHA-256)
 system/tree/path  := { name: "system/tree/path", extends: "primitive/string" }  ; tree location
 system/type/name  := { name: "system/type/name", extends: "primitive/string" }  ; type identifier
-system/identity/peer-id := { name: "system/identity/peer-id", extends: "primitive/string" }  ; peer identity
+system/peer-id := { name: "system/peer-id", extends: "primitive/string" }  ; peer identity
 
 system/type := {
   name: "system/type",
@@ -424,7 +424,7 @@ system/handler/unregister-request := {
 ```
 system/protocol/connect/hello := {
   fields: {
-    peer_id:      {type_ref: "system/identity/peer-id"},
+    peer_id:      {type_ref: "system/peer-id"},
     nonce:        {type_ref: "primitive/bytes"},
     protocols:    {array_of: {type_ref: "primitive/string"}},
     timestamp:    {type_ref: "primitive/uint"},
@@ -437,7 +437,7 @@ system/protocol/connect/hello := {
 
 system/protocol/connect/authenticate := {
   fields: {
-    peer_id:    {type_ref: "system/identity/peer-id"},
+    peer_id:    {type_ref: "system/peer-id"},
     public_key: {type_ref: "primitive/bytes"},
     key_type:   {type_ref: "primitive/string"},
     nonce:      {type_ref: "primitive/bytes"}

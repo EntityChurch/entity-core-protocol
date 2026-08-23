@@ -16,7 +16,7 @@ This specification defines the entity-native type system for the Entity Core Pro
 ### 1.1 Purpose
 
 This document specifies:
-- Fourteen bootstrap types that seed the type system (8 primitives + 2 meta-types + `system/hash` + `system/tree/path` + `system/type/name` + `system/identity/peer-id`)
+- Fourteen bootstrap types that seed the type system (8 primitives + 2 meta-types + `system/hash` + `system/tree/path` + `system/type/name` + `system/peer-id`)
 - How type definitions are structured as entities
 - How types compose via the `extends` mechanism
 - How the type extension adds value constraints (reference to EXTENSION-TYPE.md)
@@ -406,10 +406,10 @@ The complete set of 14 bootstrap types:
 | 11 | `system/type/field-spec` | Field specification |
 | 12 | `system/tree/path` | Tree path (naming-space address) |
 | 13 | `system/type/name` | Type name (type identity) |
-| 14 | `system/identity/peer-id` | Peer identity (Base58-encoded) |
+| 14 | `system/peer-id` | Peer identity (Base58-encoded) |
 | — | `entity` | Structural root type (`{type, data}`); content_hash derived per ECF. **Primordial — not one of the 14 numbered bootstrap types:** bare `entity` precedes the namespacing entirely and co-arises with the type system (§2.7.1, §3.1.1), so it is bootstrapped *with* the type machinery rather than counted among the namespaced bootstrap types. |
 
-Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup. Bare `entity` (the un-numbered primordial row above) is likewise recognized without tree lookup, but as the co-arising structural root (§3.1.1), not as one of the 14 namespaced bootstrap types — which is why the count is 14, not 15 (0.8.1 / F37: reconciles the prior 14-title-vs-15-row mismatch; the two dangling `system/peer.peer_id` refs at §10.1 / Appendix B are repointed to the canonical `system/identity/peer-id` in the same pass).
+Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup. Bare `entity` (the un-numbered primordial row above) is likewise recognized without tree lookup, but as the co-arising structural root (§3.1.1), not as one of the 14 namespaced bootstrap types — which is why the count is 14, not 15 (0.8.1 / F37: reconciles the prior 14-title-vs-15-row mismatch; the `system/peer.peer_id` refs at §10.1 / Appendix B resolve to the canonical core type **`system/peer-id`** — corrected 2026-07-27 from F37's initial mis-placement under the `system/identity/` **extension** namespace: `peer-id` is a core protocol primitive used in the connect handshake before any extension loads, not an identity-extension type, and the cohort + oracle had rightly kept the core name throughout).
 
 ### 4.5 system/hash
 
@@ -505,29 +505,29 @@ Encoding is unchanged — `system/type/name` extends `primitive/string`, so it e
 
 **Rationale:** Type names are the type-space address primitive. Convention maps type names to tree paths (`system/type/{type_name}`), but the name is the interop contract — the same type name means the same structural definition regardless of where or whether it's stored. Every field that holds a type reference (`type_ref`, `extends`, `input_type`, `output_type`, `key_type`, `type_args`, `entity_type`) benefits from the type distinction.
 
-### 4.8 system/identity/peer-id
+### 4.8 system/peer-id
 
 The peer identity type. Part of the bootstrap set.
 
-`system/identity/peer-id` extends `primitive/string` — on the wire it is a CBOR text string. The type distinguishes peer identifiers (Base58-encoded `key_type || hash_type || digest`) from arbitrary strings. For Ed25519 + SHA-256: 46 Base58 characters. Fields typed as `system/identity/peer-id` hold peer identity values.
+`system/peer-id` extends `primitive/string` — on the wire it is a CBOR text string. The type distinguishes peer identifiers (Base58-encoded `key_type || hash_type || digest`) from arbitrary strings. For Ed25519 + SHA-256: 46 Base58 characters. Fields typed as `system/peer-id` hold peer identity values.
 
 ```cbor
 {
   "type": "system/type",
   "data": {
-    "name": "system/identity/peer-id",
+    "name": "system/peer-id",
     "extends": "primitive/string"
   }
 }
 ```
 
-Encoding is unchanged — `system/identity/peer-id` extends `primitive/string`, so it encodes as a CBOR text string (tstr). Validation treats it as a string. The type extension (EXTENSION-TYPE.md) MAY add value constraints (e.g., Base58 format validation, length check).
+Encoding is unchanged — `system/peer-id` extends `primitive/string`, so it encodes as a CBOR text string (tstr). Validation treats it as a string. The type extension (EXTENSION-TYPE.md) MAY add value constraints (e.g., Base58 format validation, length check).
 
-**Rationale:** Peer IDs are the identity-space address primitive. Every field that holds a peer identifier (`peer_id` on identity entities and connection messages) benefits from the type distinction. The four address primitives — `system/hash` (content), `system/tree/path` (naming), `system/type/name` (type), `system/identity/peer-id` (identity) — are now all typed.
+**Rationale:** Peer IDs are the identity-space address primitive. Every field that holds a peer identifier (`peer_id` on identity entities and connection messages) benefits from the type distinction. The four address primitives — `system/hash` (content), `system/tree/path` (naming), `system/type/name` (type), `system/peer-id` (identity) — are now all typed.
 
 ### 4.9 system/deletion-marker
 
-The canonical deletion marker. A zero-field entity used by EXTENSION-REVISION (and any future extension that needs an explicit deletion signal in a content-addressed structure) to record intentional path deletion in a version's trie. Registered as a core type at peer init alongside `system/hash`, `system/tree/path`, `system/type/name`, and `system/identity/peer-id`; available always; not owned by EXTENSION-REVISION (the merge logic that consumes deletion markers lives in EXTENSION-REVISION.md §4.4.4 / §6.1, but the type itself is core because deletion semantics are generic).
+The canonical deletion marker. A zero-field entity used by EXTENSION-REVISION (and any future extension that needs an explicit deletion signal in a content-addressed structure) to record intentional path deletion in a version's trie. Registered as a core type at peer init alongside `system/hash`, `system/tree/path`, `system/type/name`, and `system/peer-id`; available always; not owned by EXTENSION-REVISION (the merge logic that consumes deletion markers lives in EXTENSION-REVISION.md §4.4.4 / §6.1, but the type itself is core because deletion semantics are generic).
 
 ```cbor
 {
@@ -636,7 +636,7 @@ A type with fields and no `extends` (or extending another structured type). This
 {
   "name": "system/protocol/connect/hello",
   "fields": {
-    "peer_id":   {"type_ref": "system/identity/peer-id"},
+    "peer_id":   {"type_ref": "system/peer-id"},
     "nonce":     {"type_ref": "primitive/bytes"},
     "protocols": {"array_of": {"type_ref": "primitive/string"}},
     "timestamp": {"type_ref": "primitive/uint"}
@@ -1079,7 +1079,7 @@ Connection initiation message. Exchanges peer identity, nonce challenge, and pro
   "data": {
     "name": "system/protocol/connect/hello",
     "fields": {
-      "peer_id":      {"type_ref": "system/identity/peer-id"},
+      "peer_id":      {"type_ref": "system/peer-id"},
       "nonce":        {"type_ref": "primitive/bytes"},
       "protocols":    {"array_of": {"type_ref": "primitive/string"}},
       "timestamp":    {"type_ref": "primitive/uint"},
@@ -1113,7 +1113,7 @@ Identity proof. The signature is a separate `system/signature` entity found via 
   "data": {
     "name": "system/protocol/connect/authenticate",
     "fields": {
-      "peer_id":    {"type_ref": "system/identity/peer-id"},
+      "peer_id":    {"type_ref": "system/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"},
       "nonce":      {"type_ref": "primitive/bytes"}
@@ -1450,7 +1450,7 @@ Represents a peer's cryptographic identity. (Renamed from `system/identity` in v
   "data": {
     "name": "system/peer",
     "fields": {
-      "peer_id":    {"type_ref": "system/identity/peer-id"},
+      "peer_id":    {"type_ref": "system/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"}
     }
@@ -2144,11 +2144,11 @@ Each primitive's data is `{"name": "<path>"}`. The ECF encoding is a single-entr
   "content_hash": h'00...'
 }
 
-; system/identity/peer-id
+; system/peer-id
 {
   "type": "system/type",
   "data": {
-    "name": "system/identity/peer-id",
+    "name": "system/peer-id",
     "extends": "primitive/string"
   },
   "content_hash": h'00...'
@@ -2222,7 +2222,7 @@ Complete protocol and supporting type definitions in CBOR diagnostic notation. T
   "data": {
     "name": "system/protocol/connect/hello",
     "fields": {
-      "peer_id":      {"type_ref": "system/identity/peer-id"},
+      "peer_id":      {"type_ref": "system/peer-id"},
       "nonce":        {"type_ref": "primitive/bytes"},
       "protocols":    {"array_of": {"type_ref": "primitive/string"}},
       "timestamp":    {"type_ref": "primitive/uint"},
@@ -2240,7 +2240,7 @@ Complete protocol and supporting type definitions in CBOR diagnostic notation. T
   "data": {
     "name": "system/protocol/connect/authenticate",
     "fields": {
-      "peer_id":    {"type_ref": "system/identity/peer-id"},
+      "peer_id":    {"type_ref": "system/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"},
       "nonce":      {"type_ref": "primitive/bytes"}
@@ -2396,7 +2396,7 @@ Complete protocol and supporting type definitions in CBOR diagnostic notation. T
   "data": {
     "name": "system/peer",
     "fields": {
-      "peer_id":    {"type_ref": "system/identity/peer-id"},
+      "peer_id":    {"type_ref": "system/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"}
     }
