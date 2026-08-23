@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.0
+**Version**: 0.8.2
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md
@@ -2113,6 +2113,44 @@ check_permission(execute, capability, handler_pattern, local_peer_id):
   ; When resource is present, the same grant must match all four dimensions.
   ; When resource is absent, resource dimension is unchecked at dispatch —
   ; handler may still check internally (§6.3, §6.7).
+  ;
+  ; THE CONDITION IS THE FIELD, NOT THE DOOR (normative, 0.8.2).
+  ; This check binds EVERY dispatch that carries a resource target —
+  ; wire entry and handler-to-handler (in-process) sub-dispatch alike.
+  ; There is no wire-entry predicate and no is_sub_dispatch flag: the
+  ; only test is `execute.data.resource is not null`.
+  ; An implementation MUST NOT synthesize an `execute` that omits a
+  ; resource target the dispatch holds. Where a child dispatch derives a
+  ; resource, THAT value is what the check receives.
+  ; See §6.2: `register`/`unregister` derive their install path from
+  ; `EXECUTE.resource.targets[0]`, and §6.2 assigns their install-path
+  ; authorization to THIS check and to no other. A sub-dispatch path that
+  ; skips it leaves `register` authorized by nothing.
+  ;
+  ; THE AUTHORITY IS THREE-VALUED, NOT OPTIONAL (normative, 0.8.2).
+  ; Modeling the dispatch authority as an optional capability collapses two
+  ; states that MUST stay distinct, and either default is a defect:
+  ;   (a) SELF — the peer dispatching as itself at wire entry. The authority
+  ;       is the caller capability carried on the envelope and verified by
+  ;       verify_request above; it is supplied explicitly, never inferred.
+  ;   (b) GRANT — an in-process sub-dispatch. The authority is the executing
+  ;       handler's grant (§6.8: gate on the handler grant, never on the
+  ;       propagated caller capability — the confused-deputy door).
+  ;   (c) ABSENT — a sub-dispatch whose parent holds no handler grant and for
+  ;       which no explicit capability was supplied. This MUST deny (403).
+  ; An implementation that represents this as `Option<Capability>` has one
+  ; spelling for (a) and (c). Defaulting the empty case to allow authorizes
+  ; every grantless sub-dispatch; defaulting it to deny breaks entry dispatch.
+  ; Carry the third state explicitly.
+  ;
+  ; A sub-dispatch that names NO resource has NO resource (normative, 0.8.2).
+  ; The child MUST NOT inherit the parent's resource targets — neither into
+  ; this check nor into the child handler context. Inheritance manufactures a
+  ; target the caller never named, and any handler that reads the field acts
+  ; on it: a handler sub-dispatching to `register` without naming a resource
+  ; would install at whatever path ITS caller happened to name. The absent
+  ; case is the documented one above — unchecked here, handler checks
+  ; internally — not an invitation to supply a value.
   operation = execute.data.operation
   target_peer = extract_peer(execute.data.uri, local_peer_id)
   resource_target = execute.data.resource                          ; may be null
@@ -2705,7 +2743,7 @@ A capability minted to authorize action against **another peer's** namespace (cr
 
 This is the documented consequence of §5.5a's granter-frame canonicalization, not a new rule. The subtlety is that canonicalizing cap resources against the verifier's `local_peer_id` rather than the granter's `peer_id` leaves the bug latent — the two are byte-identical for same-peer capabilities, so only the foreign-granter case (a cap minted by one peer and presented against another) exposes it. The conformance vector `captok_form_dispatch_minted_pl_presented_xpeer` exercises exactly that case.
 
-**Operator-facing consequence**: cross-peer cap minting helpers (test fixtures, integration test scaffolds, role-derived token helpers, multi-sig helpers) MUST use explicit cross-peer form for cap resources. Helpers that use peer-relative form on foreign-granted caps are non-conformant. Conformance vector: `captok_form_dispatch_minted_pl_presented_xpeer` (V2(a), per GUIDE-CONFORMANCE §9).
+**Operator-facing consequence**: cross-peer cap minting helpers (test fixtures, integration test scaffolds, role-derived token helpers, multi-sig helpers, **continuation install helpers**) MUST use explicit cross-peer form for cap resources. *(Continuation install helpers are named explicitly because they are the only class on this list reachable in production rather than in test scaffolding: a `dispatch_capability` is minted by one peer, persisted at another, and later wielded by that second peer against its own namespace — the foreign-granter case, by construction, on every install. `EXTENSION-CONTINUATION` §3.5 carries the worked example.)* Helpers that use peer-relative form on foreign-granted caps are non-conformant. Conformance vector: `captok_form_dispatch_minted_pl_presented_xpeer` (V2(a), per GUIDE-CONFORMANCE §9).
 
 **§5.5a applies on three surfaces (normative).** The granter-frame canonicalization rule above applies wherever a capability's resource patterns are matched against a target path:
 
