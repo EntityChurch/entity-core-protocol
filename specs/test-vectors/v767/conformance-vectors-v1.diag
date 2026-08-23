@@ -90,9 +90,10 @@
   },
 
   / HASH-FORMAT-SHA-384-1 — inherit v7.66 AGILITY-ENTITY-1 corpus fixture
-    (system/peer with 0xAA×64 pubkey, key_type='experimental-test' 0xFE);
-    re-hash under content_hash_format=0x01 (SHA-384); validate the wire
-    content_hash includes the 0x01 format byte. See SEEDS.md §1.2.            /
+    (system/peer with 0xAA×64 pubkey, key_type='experimental-test' 0xFE).
+    .1 pins the fixture's floor-form content_hash; .2 asserts that authoring
+    that same fixture under content_hash_format=0x01 is REFUSED — V7 §4.5a
+    item 1a pins system/peer to the floor unconditionally. See SEEDS.md §1.2. /
 
   {
     "id": "hash-format-sha-384.1.inherited_sha256_pin",
@@ -112,8 +113,8 @@
 
   {
     "id": "hash-format-sha-384.2.rehash",
-    "description": "Same fixture entity, re-hashed under content_hash_format=0x01 (SHA-384). ECF-encoded {data, type} input is 128 bytes (per the v7.66 corpus); SHA-384 digest = 48 bytes; wire content_hash = 49 bytes (0x01 format byte + 48 B digest).",
-    "kind": "content_hash_under_format",
+    "description": "Authoring a system/peer under content_hash_format=0x01 (SHA-384) MUST be refused. V7 §4.5a item 1a (v7.77) pins the system/peer identity entity to the ECFv1-SHA-256 floor unconditionally — every connection, whatever the active format, whatever the peer's home format — because its data is wholly recoverable from the public peer-id and every consumer derives its hash rather than fetching it. A non-floor system/peer is therefore a construction that cannot exist, and this vector is the guard for the rule that retired it.",
+    "kind": "construct_reject",
     "input": {
       "type": "system/peer",
       "data": {
@@ -122,9 +123,9 @@
       },
       "content_hash_format": 1
     },
-    "canonical_digest_sha384": h'2e64bbde3c494cf7cd4fb53ae3bf6420ec6d9bfa686348729eaa687e421c01c059c1ed5775824bcffc50df0f3eef5a69',
-    "canonical_content_hash": h'012e64bbde3c494cf7cd4fb53ae3bf6420ec6d9bfa686348729eaa687e421c01c059c1ed5775824bcffc50df0f3eef5a69',
-    "display": "ecfv1-sha384:2e64bbde…3eef5a69"
+    "expected_behavior": "construction refused. Error class is deliberately unspecified: this is a local authoring invariant, not a cross-peer seam, so two conformant impls cannot diverge observably across a peer boundary here — impls MAY use a structural validation error, and it is pinned only as 'the entity does not construct'. Same shape as varint-reserved-ff.1.key_type.",
+    "verifier_requirement": "The refusal MUST be observed through the pinned peer-entity constructor. This vector previously asserted the OPPOSITE — that the rehash succeeds, pinning canonical_content_hash 012e64bbde3c494cf7cd… — and stayed green only because the verifier hand-built the entity instead of routing through the constructor that would have refused it. A fixture that exercises a forbidden construction and passes by bypassing the code that forbids it certifies the opposite of the rule (GUIDE-CONFORMANCE §2.4a failure shape).",
+    "floor_form": "see hash-format-sha-384.1.inherited_sha256_pin — 003d0c34b5… is the only content_hash this fixture has"
   },
 
   / VARINT-MULTIBYTE-1 — multi-byte LEB128 format-code decode path exists +

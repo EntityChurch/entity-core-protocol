@@ -34,7 +34,11 @@ This document is the SINGLE SOURCE OF TRUTH for the crypto-agility corpus seeds.
 
 ### §1.2 SHA-384 fixture — `HASH-FORMAT-SHA-384-1`
 
-This vector **inherits the v7.66 `AGILITY-ENTITY-1` corpus fixture**; it is *not* a fresh seed. The fixture entity is re-hashed under `content_hash_format = 0x01` (SHA-384) to validate that the same canonical entity bytes produce the spec-required digest under a second hash family.
+This vector **inherits the v7.66 `AGILITY-ENTITY-1` corpus fixture**; it is *not* a fresh seed.
+
+> **Inverted `[FOLDED]` — the fixture is a `system/peer`, and a `system/peer` has exactly one content_hash.** This vector was written to re-hash the fixture under `content_hash_format = 0x01` and pin the result, on the theory that the same canonical bytes should produce a spec-required digest under a second hash family. **`ENTITY-CORE-PROTOCOL` §4.5a item 1a (v7.77) retired the construction it was pinning**: the `system/peer` identity entity is authored at the ECFv1-SHA-256 floor unconditionally, so there is no SHA-384 form of it to assert. `.2.rehash` now asserts the refusal instead, and the verifier MUST route through the pinned constructor — it stayed green for a week only because it hand-built the entity and bypassed the code that would have refused it.
+>
+> **Coverage consequence, stated because inverting loses something real:** this was the corpus's only *positive* SHA-384 content-hash vector, and the corpus no longer exercises SHA-384 digest computation over an entity in the affirmative. **A replacement positive vector belongs on a non-`system/peer` type** (any entity that legitimately carries a home format) and is **owed** — it is not created here, because retargeting this vector is what §4.4 explicitly ruled against. Until it lands, `0x01` is exercised only by refusal.
 
 | Pin | Value |
 |---|---|
@@ -42,9 +46,7 @@ This vector **inherits the v7.66 `AGILITY-ENTITY-1` corpus fixture**; it is *not
 | Public-key seed | 64 bytes, every byte `0xAA`. |
 | ECF-encoded `{data, type}` input length | 128 bytes |
 | SHA-256 content_hash (33 B wire, inherited v7.66 `AGILITY-ENTITY-1` pin) | `003d0c34b508c5bf9eca5f086f09aac10f44bd43fca1a091b6aa55a096ca8fcd45` |
-| SHA-384 digest (48 B raw) | `2e64bbde3c494cf7cd4fb53ae3bf6420ec6d9bfa686348729eaa687e421c01c059c1ed5775824bcffc50df0f3eef5a69` |
-| SHA-384 content_hash (49 B wire = `0x01` format byte + 48 B digest) | `012e64bbde3c494cf7cd4fb53ae3bf6420ec6d9bfa686348729eaa687e421c01c059c1ed5775824bcffc50df0f3eef5a69` |
-| Display | `ecfv1-sha384:2e64bbde…3eef5a69` |
+| SHA-384 form | **None — does not exist.** `system/peer` is floor-pinned by §4.5a item 1a; authoring it under `0x01` MUST be refused (`.2.rehash`). The retired pin was `012e64bbde…3eef5a69`; it is recorded here as history, not as an expectation. |
 
 ### §1.3 Varint probes — `VARINT-MULTIBYTE-1` / `VARINT-RESERVED-FF-1` / `FORMAT-CODE-INTERPRETATION-1`
 
@@ -109,18 +111,22 @@ CapabilityTokenData {
 
 **Notes**:
 - `grantee` is the wire content_hash of B's `system/peer` entity. Per v7.69 §1.8, references to identities use the identity's home-format content_hash (NOT re-derived under the active format).
-- `granter.hash` is the wire content_hash of A's `system/peer` entity, under A's home format.
+- `granter.hash` is the wire content_hash of A's `system/peer` entity, at the **ECFv1-SHA-256 floor** — not A's home format. See the §2.4 correction below.
 - The cap-token entity ITSELF has a content_hash under the active format (SHA-256 in all three matrix vectors per §2.2).
 - `expires_at: 0` is the matrix-vector convention for "no expiry"; impls that gate on `expires_at <= now()` MUST treat 0 as "infinite past" only for the impl-defined sentinel, not for these corpus vectors. The `AUTHZ-EXPIRED-1` vector in GUIDE-CONFORMANCE §9 (v7.71) covers the expiry behavior separately.
 
 ### §2.4 Identity references — arch clarification #2 (home-format pin)
 
-For M3 and M6, Peer A's home format is SHA-384 and Peer B's is SHA-256. The cap-token references each peer by THAT peer's home-format content_hash:
+For M3 and M6, Peer A's home format is SHA-384 and Peer B's is SHA-256. The cap-token references each peer by that peer's `system/peer` content_hash:
 
 - `grantee` (refers to B): SHA-256 content_hash of B's `system/peer` entity.
-- `granter.hash` (refers to A): SHA-384 content_hash of A's `system/peer` entity (for M3/M6); SHA-256 for M2.
+- `granter.hash` (refers to A): **SHA-256 (floor-form) content_hash** of A's `system/peer` entity — for M3 and M6 as well as M2.
 
-The cap-token entity itself is authored under the active format (SHA-256 — see §2.2), so the wire cap-token content_hash is SHA-256-form even when it references a SHA-384 identity. **This is the v7.69/v7.70 invariant**: content travels in active format, references to identities use the identity's home format.
+The cap-token entity itself is authored under the active format (SHA-256 — see §2.2). **The v7.69/v7.70 invariant still holds generally**: content travels in active format, references to identities use the identity's home format.
+
+> **Correction — item 1a carved `system/peer` out of this clarification, and this copy was not swept.** This section read *"`granter.hash` (refers to A): SHA-384 content_hash"* and asserted the invariant without its exception. **`ENTITY-CORE-PROTOCOL` §4.5a item 1a (v7.77) made `system/peer` the one type with no home format** — it is authored at the ECFv1-SHA-256 floor unconditionally, because its data (`{peer_id, public_key, key_type}`) is wholly recoverable from the public peer-id, so an entity nobody fetches to learn its hash cannot be hold-and-fetch. **Every identity reference in this corpus therefore resolves floor-form, including `granter.hash` for M3 and M6.**
+>
+> **This text disagreed with the `.diag` beside it.** The M3/M6 `expected_peer_a_content_hash` values in `agility-vectors-v1.diag` are floor-form (`00…`, 33 B) and have been since the re-stamp; this prose kept claiming 49-byte SHA-384-form. **A red fixture is visible and a stale sentence is not** — when a pinned primitive moves, sweep the prose that pins it, not only the artifacts that failed.
 
 ### §2.5 Signature target — arch clarification #3 (RFC 8032 deterministic)
 

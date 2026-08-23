@@ -32,7 +32,11 @@ This document is the SINGLE SOURCE OF TRUTH for the v7.67 corpus seeds. The sibl
 
 ### §1.2 SHA-384 fixture — `HASH-FORMAT-SHA-384-1`
 
-This vector **inherits the v7.66 `AGILITY-ENTITY-1` corpus fixture**; it is *not* a fresh seed. The fixture entity is re-hashed under `content_hash_format = 0x01` (SHA-384) to validate that the same canonical entity bytes produce the spec-required digest under a second hash family.
+This vector **inherits the v7.66 `AGILITY-ENTITY-1` corpus fixture**; it is *not* a fresh seed.
+
+> **Inverted `[FOLDED]` — the fixture is a `system/peer`, and a `system/peer` has exactly one content_hash.** This vector was written to re-hash the fixture under `content_hash_format = 0x01` and pin the result, on the theory that the same canonical bytes should produce a spec-required digest under a second hash family. **`ENTITY-CORE-PROTOCOL` §4.5a item 1a (v7.77) retired the construction it was pinning**: the `system/peer` identity entity is authored at the ECFv1-SHA-256 floor unconditionally, so there is no SHA-384 form of it to assert. `.2.rehash` now asserts the refusal instead, and the verifier MUST route through the pinned constructor — it stayed green for a week only because it hand-built the entity and bypassed the code that would have refused it.
+>
+> **Coverage consequence, stated because inverting loses something real:** this was the corpus's only *positive* SHA-384 content-hash vector, and the corpus no longer exercises SHA-384 digest computation over an entity in the affirmative. **A replacement positive vector belongs on a non-`system/peer` type** (any entity that legitimately carries a home format) and is **owed** — it is not created here, because retargeting this vector is what §4.4 explicitly ruled against. Until it lands, `0x01` is exercised only by refusal.
 
 | Pin | Value |
 |---|---|
@@ -40,9 +44,7 @@ This vector **inherits the v7.66 `AGILITY-ENTITY-1` corpus fixture**; it is *not
 | Public-key seed | 64 bytes, every byte `0xAA`. |
 | ECF-encoded `{data, type}` input length | 128 bytes |
 | SHA-256 content_hash (33 B wire, inherited v7.66 `AGILITY-ENTITY-1` pin) | `003d0c34b508c5bf9eca5f086f09aac10f44bd43fca1a091b6aa55a096ca8fcd45` |
-| SHA-384 digest (48 B raw) | `2e64bbde3c494cf7cd4fb53ae3bf6420ec6d9bfa686348729eaa687e421c01c059c1ed5775824bcffc50df0f3eef5a69` |
-| SHA-384 content_hash (49 B wire = `0x01` format byte + 48 B digest) | `012e64bbde3c494cf7cd4fb53ae3bf6420ec6d9bfa686348729eaa687e421c01c059c1ed5775824bcffc50df0f3eef5a69` |
-| Display | `ecfv1-sha384:2e64bbde…3eef5a69` |
+| SHA-384 form | **None — does not exist.** `system/peer` is floor-pinned by §4.5a item 1a; authoring it under `0x01` MUST be refused (`.2.rehash`). The retired pin was `012e64bbde…3eef5a69`; it is recorded here as history, not as an expectation. |
 
 ### §1.3 Varint probes — `VARINT-MULTIBYTE-1` / `VARINT-RESERVED-FF-1` / `FORMAT-CODE-INTERPRETATION-1`
 
@@ -191,6 +193,39 @@ The sibling `conformance-vectors-v1.cbor` is the deterministic ECF-canonical enc
 
 Architecture does NOT bless a specific encoder binary; the `.diag` is the spec-derived ground truth and the `.cbor` is its deterministic build output. Any conformant ECF encoder (Go `ecf.Encode`, Rust `ecf::encode`, Python `entity_core_codec.encode_ecf`) MUST produce byte-identical output. The Phase-1 entity bytes inlined in §§1.1–1.2 above are the lock against which the encoder is regression-checked.
 
+### §4.1 Division of labour — architecture sets fields, the encoder settles bytes `[MUST]` `[RULED 2026-08-13]`
+
+**Architecture edits the `.diag` source: vector `id`s, `description`s, `kind`s, inputs, and which assertion a vector makes. Architecture does NOT hand-derive, hand-edit, or hand-inspect encoded bytes.** No byte-run measuring, no hex-literal eyeballing, no `.cbor` edits, and no byte pin transcribed from a report into this corpus by hand. **A claim about what bytes an artifact contains is made by running a tool and quoting its output, never by reading the file.** The `.cbor` is a build artifact and architecture is not its build owner (§4).
+
+**Rationale, from the two ways this went wrong in one week.** Values hand-carried into the corpus is how the M3/M6 rows went stale and how the F16 width correction reached the artifact but never the source. Both were then *found* by hand-inspection, which felt like diligence and is not a process: it does not run, it does not gate, and it does not survive the reviewer's attention span. **Every check below is mechanical and re-runnable; that is the whole point of writing them down.**
+
+### §4.2 Two gates, and they assert different things `[MUST]` `[RULED 2026-08-13]`
+
+Both are required. Either alone leaves the class the other catches invisible.
+
+| Gate | Asserts | Catches |
+|---|---|---|
+| `v767-corpus-verify` | **artifact-is-expected** — decode the `.cbor`, re-derive the crypto, check structural invariants | a corrupted or wrongly-valued artifact |
+| `v767-corpus-build -check` | **source-produces-artifact** — re-encode both `.diag`s, compare to the committed `.cbor`s, write nothing | **source and artifact having drifted apart** |
+
+> **The second gate exists because its absence cost two months.** The June F16 correction was applied to the `.cbor` and never swept back to the `.diag`. `v767-corpus-verify` reported **52 PASS / 0 FAIL** throughout — correctly, because the artifact *was* what it was expected to be. **Nothing asserted that the source still produced it**, so a corpus verifying green against itself carried a source that could no longer rebuild it. `-check` writes nothing and is safe to run against a tree its runner does not own.
+>
+> **`-check` deliberately does not recommend rebuilding on failure, and that is the correct behaviour.** When source and artifact disagree, **which side is right is a judgement, not a default** — in the F16 case the `.cbor` was the correct side, so a blind rebuild would have destroyed the good copy and silently re-introduced the bad widths. **Deciding which side is right is exactly the step the June regen skipped.**
+
+### §4.3 The legacy encoder proof MUST be pinned to a frozen source `[MUST]` `[RULED 2026-08-13]`
+
+`-verify-legacy` proves the encoder still reproduces a known-good historical artifact. Its input pair — **the `.diag` frozen at `56d4de4` plus the six §4-width corrections, reproducing `8e7c5232…` at 9236 B** — **MUST NOT be re-pinned to a moving source.** Once the live `.diag` legitimately moves (as it did under the M3/M6 re-stamp), re-encoding it cannot reproduce the June artifact, and re-pointing the proof at HEAD would make it assert only that today's source produces today's output — **a tautology wearing the costume of an encoder proof.**
+
+### §4.4 Sequence for any corpus change `[MUST]`
+
+1. **Architecture** edits the `.diag` **fields** — both copies, encoded content identical (§5 de-versioning rule).
+2. **Build owner** (Go, §4) rebuilds both `.cbor` with byte-identity enforced **before** anything is written.
+3. **`-check` green** — source produces artifact, both copies identical.
+4. **`v767-corpus-verify` green** — artifact decodes and re-derives.
+5. **Architecture commits the artifacts** into `entity-core-protocol`. The build owner writes the files; it does not run git in a tree it does not own.
+
+**Never hand-edit a `.cbor`. Never transcribe a byte pin by hand. Never re-pin the legacy proof.**
+
 ---
 
 ## §5 Round-trip workflow (what closes this cycle)
@@ -227,6 +262,10 @@ Architecture does NOT bless a specific encoder binary; the `.diag` is the spec-d
 > **`v767/` is the source; the publish copy takes its encoded content verbatim.** Where the two disagree on an encoded field, `v767/` wins by definition rather than by review. On the fully-qualified-citation question specifically (`V7 §1.5` vs `§1.5`), **the qualified form is canonical in both** — a citation that does not name its spec is exactly what `AGENTS-STANDARD` says not to ship, and the published copy is the one that most needs to be self-contained for a reader with no other context.
 >
 > *Found by `entity-core-go` at rebuild-planning time: **5 of 13 shared descriptions had diverged** — two still carrying the pre-1a `granter.hash is SHA-384` claim this file swept, three by de-versioning alone. **Diverged sources would have produced two different `.cbor` files at the next rebuild**, which is why refusing to rebuild before reconciling was protecting a live invariant rather than a hypothetical one. All five reconciled to the `v767/` strings 2026-08-12, and verified afterwards that every remaining differing line between the two files sits inside a comment block.*
+>
+> **FOLDED `[2026-08-13]` — `hash-format-sha-384.2.rehash` is inverted in both `.diag` sources; the `.cbor` rebuild is owed by the build owner (§4.4 step 2).** The paragraph below is the record of why it was owed for four handoffs, kept because the shape recurs. What it describes is now done on the source side: `kind` is `construct_reject`, the pre-inversion `canonical_content_hash` pin is gone, and the vector carries an explicit `verifier_requirement` that the refusal be observed through the pinned constructor rather than a hand-built entity. **Until step 2 lands, source and artifact disagree by construction and `-check` is expected red — that is the sequence working, not a defect.** Item (a) of the same pass, the `peer_a_content_hash` field rename, landed earlier at `8d38e62`.
+>
+> *(Historical, as written when it was outstanding.)* **the `hash-format-sha-384.2.rehash` inversion is ruled and NOT folded.** The vector still carries its pre-inversion pin (`canonical_content_hash` `012e64bbde3c494cf7cd…`), i.e. it still asserts that a `system/peer` **can** be authored under `content_hash_format = 0x01` — the construction item 1a forbids. `v767-corpus-verify` names it on every run as a NOTE, which is the only reason it is not lost. **This is the third ruled-not-folded item in this corpus from the same author in one week**, and it is a `.diag` **field** change (the vector's `kind` and its expected assertion), not a byte change — so it is architecture's under §4.1 and sequences through §4.4 like any other: edit both sources, Go rebuilds, `-check`, verify, commit. **It is deliberately not bundled into the artifact-landing commit**, because folding it now would immediately invalidate the `.cbor` that was just proven consistent — the churn is the reason to sequence it, not a reason to defer it indefinitely.
 >
 > **Also owed in the same pass, ruled here:** (a) the field reverts to §2.6's `peer_a_content_hash` — the `_sha384` suffix was always a divergence from the ratified shape and under 1a names a knob that cannot exist; (b) `hash-format-sha-384.2.rehash` is **inverted, not retargeted** (see `HASH-FORMAT-SHA-384-1` in the definition source) — it currently asserts a `system/peer` under `content_hash_format = 0x01`, which 1a forbids, and stays green only because the verifier hand-builds the entity instead of going through the pinned constructor. **A vector that exercises a forbidden construction and passes by routing around the code that would forbid it certifies the opposite of the rule** — the `GUIDE-CONFORMANCE` §2.4a failure shape, in a fixture. Inverting it (authoring a `system/peer` under `0x01` MUST be refused) turns the vector into the guard for the rule that retired it; the verifier MUST go through the pinned constructor so the bypass cannot recur.
 
