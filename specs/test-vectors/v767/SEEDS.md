@@ -116,9 +116,15 @@ CapabilityTokenData {
 For M3 and M6, Peer A's home format is SHA-384 and Peer B's is SHA-256. The cap-token references each peer by THAT peer's home-format content_hash:
 
 - `grantee` (refers to B): SHA-256 content_hash of B's `system/peer` entity.
-- `granter.hash` (refers to A): SHA-384 content_hash of A's `system/peer` entity (for M3/M6); SHA-256 for M2.
+- `granter.hash` (refers to A): ~~SHA-384 content_hash of A's `system/peer` entity (for M3/M6)~~ — **superseded, see the correction below**; SHA-256 for M2.
 
 The cap-token entity itself is authored under the active format (SHA-256 — see §2.2), so the wire cap-token content_hash is SHA-256-form even when it references a SHA-384 identity. **This is the v7.69/v7.70 invariant**: content travels in active format, references to identities use the identity's home format.
+
+> **Correction `[2026-08-12]` — item 1a carved `system/peer` out of this clarification, and this text was not swept.** The invariant in the paragraph above still holds **generally**: content travels in active format, references to identities use the identity's home format. But **`ENTITY-CORE-PROTOCOL` §4.5a item 1a (v7.77) made `system/peer` the one type with no home format** — it is authored at the ECFv1-SHA-256 floor unconditionally, because its data (`{peer_id, public_key, key_type}`) is wholly recoverable from the public peer-id and so an entity nobody fetches to learn its hash cannot be hold-and-fetch. **Every identity reference in this corpus therefore resolves floor-form, including `granter.hash` for M3 and M6.**
+>
+> **This is the root of all six stale M3/M6 assertions, and the chain is worth stating once:** `peer_a`'s content hash moves to the floor (assertions 1 and 4) → the root cap references it via `granter.hash`, so the cap's own content hash moves (2 and 5) → the signature is over that content hash, so it moves too (3 and 6). One cause, six symptoms, and the proof it is one cause is that **every `peer_b` SHA-256 assertion stays green** — peer_b was already at the floor, and 1a did not move it.
+>
+> **The failure worth recording is that this clarification is where the sweep should have started and did not.** §2.4 is a *ratified normative statement* that 1a contradicted; the fixture is only its downstream consequence. `entity-core-go` found the six failing expectations by running the verifier and correctly derived replacements consistent with 1a — but the derivation contradicted this section's text, and **the disagreement between the fixture and the clarification went unnoticed by everyone, because a red fixture is visible and a stale sentence is not.** When a pinned primitive moves, sweep the prose that pins it, not only the artifacts that failed.
 
 ### §2.5 Signature target — arch clarification #3 (RFC 8032 deterministic)
 
@@ -142,10 +148,10 @@ For each matrix vector, the cohort produces (and the next-round corpus update pi
   "id": "matrix.M2",  // or M3 / M6
   "peer_a_pubkey":   hex,
   "peer_a_peer_id":  Base58,
-  "peer_a_content_hash":  hex (home-format),
+  "peer_a_content_hash":  hex (ECFv1-SHA-256 floor — see correction below),
   "peer_b_pubkey":   hex,
   "peer_b_peer_id":  Base58,
-  "peer_b_content_hash":  hex (home-format),
+  "peer_b_content_hash":  hex (ECFv1-SHA-256 floor — see correction below),
   "root_cap_cbor":          hex (cap-token entity {type, data} CBOR, active format),
   "root_cap_content_hash":  hex (active format = SHA-256),
   "root_cap_signature":     hex (A's signature over root_cap_content_hash)
@@ -153,6 +159,12 @@ For each matrix vector, the cohort produces (and the next-round corpus update pi
 ```
 
 The cohort regression-runs M2/M3/M6 with the §2.1 seeds substituted for ephemeral keys, captures these tuples, and ships them to architecture in a one-line "byte-equal vs the §2.1+§2.3+§2.5 derivation ✅" plus the captured pins. Architecture then folds them into `conformance-vectors-v1.diag` Phase-2 vector entries.
+
+> **Correction `[2026-08-12]` — `peer_*_content_hash` is floor-form, not home-form.** The two annotations above read `hex (home-format)` until this correction. **`ENTITY-CORE-PROTOCOL` §4.5a item 1a (v7.77) pins the `system/peer` entity to the ECFv1-SHA-256 floor unconditionally** — every connection, whatever the active format, whatever the peer's home format. `system/peer`'s data is `{peer_id, public_key, key_type}`, wholly recoverable from the public peer-id, so it is derive-to-meet and never home-form. The `_sha384` rows of M3 and M6 are therefore floor-form (`00…`, 33 B), not SHA-384-form (`01…`, 49 B).
+>
+> **This annotation and the M3/M6 corpus expectations are the same defect, and it is arch's, not an implementer's** — 1a moved a value and the artifacts that pinned it were not swept. `entity-core-go` found the corpus half by running the verifier (`49 PASS, 6 FAIL` at `419a715`); this half was found by reading §2.6 while ruling on that report. **Anything that pinned a `system/peer` content hash before v7.77 is suspect until re-derived** — that is the sweep 1a owed and did not get.
+>
+> **The field name is unchanged and was always `peer_a_content_hash`.** The corpus's `expected_peer_a_content_hash_sha384` was a divergence from this ratified shape before 1a existed; renaming it back is conformance to §2.6, not a new decision. Under 1a the `_sha384` suffix additionally names a knob that can no longer exist.
 
 ---
 
@@ -190,6 +202,33 @@ Architecture does NOT bless a specific encoder binary; the `.diag` is the spec-d
 | 3 | **Rust + Python** | Regression-confirm Phase 1 byte-equal (already validated 2026-06-09; one-line ✅) + run Phase 2 with §2.1 seeds + confirm §2.6 tuples byte-equal Go's pin + confirm `.cbor` byte-equal. |
 | 4 | Architecture | Fold the Phase-2 byte pins into `conformance-vectors-v1.diag` from Go's note. Cohort regression-confirms one more time. Corpus lockable. |
 | 5 | **Keystone (C#)** | Vendor `agility-vectors-v1` = `v767/` + `GUIDE-CONFORMANCE` §9 `AUTHZ-*` matrix; run resync work block; re-run S4. |
+
+> **M3/M6 re-stamp status `[2026-08-12]` — the round-trip re-opens at step 3, and it is not blocked on architecture.** §4.5a item 1a (v7.77) moved `system/peer` to the floor **after** the M3/M6 rows were stamped, so the six SHA-384-row expectations went stale (`entity-core-go`, `cmd/v767-corpus-verify -full-hashes` → `49 PASS, 6 FAIL`, read live at `419a715`; proposed replacements in their `spec-issues/2026-08-11-d-v767-m3-m6-restamp-proposal.md`). Go's proposal is **step 2, complete and correct in form** — derived values with a per-row reason, nothing hand-edited, and the root cause proven singular by what still passes (every `peer_b` SHA-256 assertion is green, because peer_b was already at the floor and 1a did not move it).
+>
+> **It was filed as "awaiting arch ratification"; that misreads this table.** Step 4 folds pins that step 3 has already confirmed byte-equal — **architecture does not ratify a single implementation's derivation, by design.** Go said so themselves (*"No cross-impl claim. These values were derived by Go only"*) and offered cohort confirmation as a gate rather than assuming it away. The gate is granted, and it is the standing rule here, not a new condition: a corpus is an oracle, and an oracle produced and checked by one implementation is that implementation's output with extra steps. Phase 1 is byte-pinned precisely because three impls produced it independently.
+>
+> **What actually blocked it was a stale build-state belief, not a missing ruling.** Go declined to request step 3 because they recorded rust and py as last-moved 2026-08-10 and unprobed. **Both have moved since** — `entity-core-rust` `21eb223` and `entity-core-py` `2c1aa1b`, both 2026-08-11, both pushed and clean (read live 2026-08-12). Step 3 is runnable now.
+>
+> **The re-stamp MUST cover both copies of this corpus, and the second copy is a standing hazard `[flagged 2026-08-12 — decision owed]`.** `specs/test-vectors/crypto-agility/` is the de-versioned **public release form** of this directory (`agility-SEEDS.md` / `agility-vectors-v1.{diag,cbor}`), cut at the v0.8.0 release (`cf3c436`, 2026-06-21) and **untouched since**, while `v767/` has kept moving. It carries the **same four stale `expected_peer_a_content_hash_sha384` entries** and the **same pre-1a §2.4 home-format pin** — verified 2026-08-12. Step 5 above has Keystone vendor `agility-vectors-v1`, so **the copy an external implementer consumes is the stale one**, and it announces itself as `Status: Active` and *"the SINGLE SOURCE OF TRUTH for the crypto-agility corpus seeds"* while this file makes the same claim for the same content. Two files, one content, both claiming canonicity, diverging silently — the drift `AGENTS-STANDARD`'s one-canonical-home rule exists to prevent, and go's verifier cannot see it because it pins the `v767/` path. **RESOLVED `[2026-08-12]` — re-stamp both together; there was no frozen-history dilemma.** This note first called it *"a call about frozen history."* **That framing was wrong, and two checkable facts retire it** — raised by `entity-core-go` and verified here:
+>
+> 1. **The corpora are byte-identical where it counts.** `conformance-vectors-v1.cbor` and `agility-vectors-v1.cbor` are the same bytes (`sha256 8e7c5232…e31f982e`, both files, 2026-08-12) — the sha the corpus pin already verifies. The `.diag` files differ only in **de-versioning cosmetics**: header dates, `V7 §` → `§`, and sibling filenames. **No vector value differs**, which is precisely why the encoded artifacts match. So **the divergence would be *created* by re-stamping one copy — it is not a pre-existing state that leaving them alone protects.**
+> 2. **The published artifact is already immutable, and not by way of this file.** `v0.8.0` is a git tag and it contains `specs/test-vectors/crypto-agility/` in full. **The tag is the archival record.** Correcting the working tree does not rewrite anything published; it only changes what the *next* release ships — which is an ordinary fixture correction, not a history edit.
+>
+> **The dilemma was self-inflicted: "published" was conflated with "immutable in the working tree."** A tagged release is what makes an artifact frozen; a directory that a tag happens to contain is not. Both copies re-stamp under the same cohort round-trip (§5 steps 2–4), and the byte-identity above is the invariant to preserve — **if the two `.cbor` shas ever differ after this, that is the defect, and it is worth a check.** Making `crypto-agility/` a generated view of `v767/` remains the stronger long-term shape and is no longer urgent once both are corrected together.
+>
+> **Phase-1 input widths — the June F16 regen was never swept back to the `.diag` `[FIXED 2026-08-12]`.** Six literals in **each** copy were wrong: the **Ed448 secret seeds carried 58 bytes** where RFC 8032 `SeedSize` is **57** (`key-type-ed448.1.pubkey`, `.4.signature`, `matrix.M2`, `matrix.M6`), and the **experimental-test `public_key` carried 63 bytes** where v7.66 §4.2 pins **64** (`hash-format-sha-384.1.inherited_sha256_pin`, `.2.rehash`).
+>
+> **The `.cbor` was right and the `.diag` was wrong** — the inverse of the usual direction, and the reason it survived: F16 corrected the build artifact in June and nobody swept the source. Confirmed by measuring the artifact rather than re-deriving from the spec: longest byte-runs in **both** `.cbor` files are `0x42`→57, `0x46`→57, `0xAA`→64, against 58/58/63 in both `.diag`.
+>
+> **The file documented its own defect while carrying it.** This `.diag`'s build comment already read *"Supersedes prior sha `4d8dfced…` which carried 58-byte Ed448 seeds, a 63-byte experimental pubkey"* — describing, as superseded history, the exact state its own body was still in. **A note saying a defect was fixed is not evidence the file was fixed**; the only check that would have caught it is the one `entity-core-go` ran — measure the artifact, compare to the source. Worth a build-time assertion rather than a reader's diligence.
+>
+> **The de-versioning rule `[MUST]` `[RULED 2026-08-12]` — it applies to comments, never to encoded content.** `crypto-agility/` is the de-versioned publish form of this directory, and the two `.cbor` artifacts MUST be byte-identical. **So de-versioning may only touch what the encoder does not see**: `/ … /` comment blocks, the header, filenames, dates, repo paths. **An `"id"` or `"description"` is encoded, so a de-versioned variant of one is not cosmetic — it is a guaranteed `.cbor` divergence at the next rebuild.**
+>
+> **`v767/` is the source; the publish copy takes its encoded content verbatim.** Where the two disagree on an encoded field, `v767/` wins by definition rather than by review. On the fully-qualified-citation question specifically (`V7 §1.5` vs `§1.5`), **the qualified form is canonical in both** — a citation that does not name its spec is exactly what `AGENTS-STANDARD` says not to ship, and the published copy is the one that most needs to be self-contained for a reader with no other context.
+>
+> *Found by `entity-core-go` at rebuild-planning time: **5 of 13 shared descriptions had diverged** — two still carrying the pre-1a `granter.hash is SHA-384` claim this file swept, three by de-versioning alone. **Diverged sources would have produced two different `.cbor` files at the next rebuild**, which is why refusing to rebuild before reconciling was protecting a live invariant rather than a hypothetical one. All five reconciled to the `v767/` strings 2026-08-12, and verified afterwards that every remaining differing line between the two files sits inside a comment block.*
+>
+> **Also owed in the same pass, ruled here:** (a) the field reverts to §2.6's `peer_a_content_hash` — the `_sha384` suffix was always a divergence from the ratified shape and under 1a names a knob that cannot exist; (b) `hash-format-sha-384.2.rehash` is **inverted, not retargeted** (see `HASH-FORMAT-SHA-384-1` in the definition source) — it currently asserts a `system/peer` under `content_hash_format = 0x01`, which 1a forbids, and stays green only because the verifier hand-builds the entity instead of going through the pinned constructor. **A vector that exercises a forbidden construction and passes by routing around the code that would forbid it certifies the opposite of the rule** — the `GUIDE-CONFORMANCE` §2.4a failure shape, in a fixture. Inverting it (authoring a `system/peer` under `0x01` MUST be refused) turns the vector into the guard for the rule that retired it; the verifier MUST go through the pinned constructor so the bypass cannot recur.
 
 ---
 
