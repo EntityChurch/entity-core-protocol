@@ -36,10 +36,17 @@ tag):
 The real contract surface — the conformance corpora — lives under
 `specs/test-vectors/`: `ecf-conformance/` (the ECF byte contract,
 `conformance-vectors-v1.{diag,cbor}`) and `crypto-agility/` (the cross-key /
-cross-hash matrix, `agility-vectors-v1.{diag,cbor}` with the seed convention in
-`agility-SEEDS.md` and `README.md`). `.diag` is the human-readable source; the sibling
+cross-hash matrix, `agility-vectors.{diag,cbor}` with the seed convention in
+`SEEDS.md` and `README.md`). `.diag` is the human-readable source; the sibling
 `.cbor` is the deterministic ECF-canonical encoding; bytes MUST match. These corpora
 are vendored downstream and are treated as pinned.
+
+**A corpus is identified by its name and its artifact sha256, never by a version stamp**
+(`GUIDE-CONFORMANCE` §5.1, 2026-08-22). `crypto-agility/` carries a `CHANGELOG.md` in
+place of the retired stamp, and its second committed copy — the revision-stamped
+`v767/` working directory — is gone. `ecf-conformance/` still carries `-v1` until
+`ENTITY-CBOR-ENCODING` Appendix E's citation rule is amended to match; that is tracked
+as owed work, not done.
 
 `CHANGELOG.md` frames `v0.8.0` as the **initial public research-preview release**.
 

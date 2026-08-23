@@ -6,7 +6,7 @@
 
 Phase 1 values are byte-equal cross-impl; Phase 2 uses the pinned-seed scheme in §2.
 
-This document is the SINGLE SOURCE OF TRUTH for the crypto-agility corpus seeds. The sibling `agility-vectors-v1.diag` carries the same values inline per the ECF-corpus convention; if anything diverges, `agility-SEEDS.md` wins and `.diag` is corrected.
+This document is the SINGLE SOURCE OF TRUTH for the crypto-agility corpus seeds. The sibling `agility-vectors.diag` carries the same values inline per the ECF-corpus convention; if anything diverges, `SEEDS.md` wins and `.diag` is corrected.
 
 ---
 
@@ -126,7 +126,7 @@ The cap-token entity itself is authored under the active format (SHA-256 — see
 
 > **Correction — item 1a carved `system/peer` out of this clarification, and this copy was not swept.** This section read *"`granter.hash` (refers to A): SHA-384 content_hash"* and asserted the invariant without its exception. **`ENTITY-CORE-PROTOCOL` §4.5a item 1a (v7.77) made `system/peer` the one type with no home format** — it is authored at the ECFv1-SHA-256 floor unconditionally, because its data (`{peer_id, public_key, key_type}`) is wholly recoverable from the public peer-id, so an entity nobody fetches to learn its hash cannot be hold-and-fetch. **Every identity reference in this corpus therefore resolves floor-form, including `granter.hash` for M3 and M6.**
 >
-> **This text disagreed with the `.diag` beside it.** The M3/M6 `expected_peer_a_content_hash` values in `agility-vectors-v1.diag` are floor-form (`00…`, 33 B) and have been since the re-stamp; this prose kept claiming 49-byte SHA-384-form. **A red fixture is visible and a stale sentence is not** — when a pinned primitive moves, sweep the prose that pins it, not only the artifacts that failed.
+> **This text disagreed with the `.diag` beside it.** The M3/M6 `expected_peer_a_content_hash` values in `agility-vectors.diag` are floor-form (`00…`, 33 B) and have been since the re-stamp; this prose kept claiming 49-byte SHA-384-form. **A red fixture is visible and a stale sentence is not** — when a pinned primitive moves, sweep the prose that pins it, not only the artifacts that failed.
 
 ### §2.5 Signature target — arch clarification #3 (RFC 8032 deterministic)
 
@@ -160,7 +160,7 @@ For each matrix vector, the corpus pins the tuple:
 }
 ```
 
-Implementations run M2/M3/M6 with the §2.1 seeds substituted for ephemeral keys and confirm these tuples are byte-equal to the §2.1+§2.3+§2.5 derivation; the pins are folded into `agility-vectors-v1.diag` Phase-2 vector entries.
+Implementations run M2/M3/M6 with the §2.1 seeds substituted for ephemeral keys and confirm these tuples are byte-equal to the §2.1+§2.3+§2.5 derivation; the pins are folded into `agility-vectors.diag` Phase-2 vector entries.
 
 ---
 
@@ -177,7 +177,7 @@ When PQ pickup happens (post-release, on external signal), seeds get pinned then
 
 ## §4 Corpus encoding (`.cbor` build artifact)
 
-The sibling `agility-vectors-v1.cbor` is the deterministic ECF-canonical encoding of `agility-vectors-v1.diag` per ENTITY-CBOR-ENCODING.md v1.5 Appendix E (same procedure as `ecf-conformance/`). Build step:
+The sibling `agility-vectors.cbor` is the deterministic ECF-canonical encoding of `agility-vectors.diag` per ENTITY-CBOR-ENCODING.md v1.5 Appendix E (same procedure as `ecf-conformance/`). Build step:
 
 ```
 # Produced from the .diag by a conformant ECF encoder. Bytes MUST match the

@@ -3,7 +3,7 @@
 **Version**: 1.0
 **Status**: Active
 
-Phase 1 (allocation + machinery) and Phase 2 (cross-key / cross-hash matrix) are byte-pinned cross-impl in `agility-vectors-v1.diag`, with the seed convention in `SEEDS.md` (this directory). Phase 3a/3b stay deferred. The sibling `agility-vectors-v1.cbor` is the deterministic ECF-canonical encoding produced from `.diag` by any conformant encoder; bytes MUST match the inline canonical (`h'...'`) values in `.diag`.
+Phase 1 (allocation + machinery) and Phase 2 (cross-key / cross-hash matrix) are byte-pinned cross-impl in `agility-vectors.diag`, with the seed convention in `SEEDS.md` (this directory). Phase 3a/3b stay deferred. The sibling `agility-vectors.cbor` is the deterministic ECF-canonical encoding produced from `.diag` by any conformant encoder; bytes MUST match the inline canonical (`h'...'`) values in `.diag`.
 
 Spec homes: §1.2 (`content_hash_format` seed table), §1.5 (`key_type` seed table).
 
@@ -51,11 +51,13 @@ Each matrix vector exercises: handshake (`hello` + `authenticate`, signature sch
 
 ## Fixture byte status
 
-**Phase 1 — LOCKED.** All five Phase-1 vectors are byte-pinned in `agility-vectors-v1.diag` with the seed convention in `SEEDS.md` §1, byte-equal cross-impl. Per the corpus-authoring discipline, pinned bytes derive from the spec algorithm (§§1.2/1.3/1.5); the inline canonical values in `.diag` are the lock.
+**Phase 1 — LOCKED.** All five Phase-1 vectors are byte-pinned in `agility-vectors.diag` with the seed convention in `SEEDS.md` §1, byte-equal cross-impl. Per the corpus-authoring discipline, pinned bytes derive from the spec algorithm (§§1.2/1.3/1.5); the inline canonical values in `.diag` are the lock.
 
-**Phase 2 — LOCKED.** The three matrix vectors (`MATRIX-M2`, `MATRIX-M3`, `MATRIX-M6`) are byte-pinned in `agility-vectors-v1.diag` from a cross-impl round-trip. All 7 gates per matrix vector are byte-equal across implementations: pubkeys + peer_ids + home content_hashes + cap-data CBOR + active cap content_hash + signature. Convention pinned during the round-trip: an unconstrained capability scope dimension encodes as `{include: []}` (`0x80`), not `{include: null}` (`0xf6`) — both halves are already bound by ENTITY-CBOR-ENCODING §232 + §3.6 `list-of(pattern)` typing.
+**Phase 2 — LOCKED.** The three matrix vectors (`MATRIX-M2`, `MATRIX-M3`, `MATRIX-M6`) are byte-pinned in `agility-vectors.diag` from a cross-impl round-trip. All 7 gates per matrix vector are byte-equal across implementations: pubkeys + peer_ids + home content_hashes + cap-data CBOR + active cap content_hash + signature. Convention pinned during the round-trip: an unconstrained capability scope dimension encodes as `{include: []}` (`0x80`), not `{include: null}` (`0xf6`) — both halves are already bound by ENTITY-CBOR-ENCODING §232 + §3.6 `list-of(pattern)` typing.
 
-**Build-artifact `.cbor`.** The `.cbor` is regenerated from the `.diag` by a canonical ECF encoder (definite-length, minimal integer encoding, length-then-lexicographic map keys per ENTITY-CBOR-ENCODING §4.1). **sha256 = `8e7c5232f64bee83d628679f930c771e4e49f2f1e37d19e41e0d7838e31f982e`** (9236 B). Corpus discipline: a byte gate MUST decode the `.cbor` and assert structural invariants (seed/pubkey field widths against the spec, no placeholder strings in `expected_*` fields), not only compare the file sha.
+**Build-artifact `.cbor`.** The `.cbor` is regenerated from the `.diag` by a canonical ECF encoder (definite-length, minimal integer encoding, length-then-lexicographic map keys per ENTITY-CBOR-ENCODING §4.1). **sha256 = `b5484e84dd2cddfa7d3cc8a041deba92cb29615aedb2180e31d8b6910ac5b648`** (10874 B). Corpus discipline: a byte gate MUST decode the `.cbor` and assert structural invariants (seed/pubkey field widths against the spec, no placeholder strings in `expected_*` fields), not only compare the file sha — and a second gate MUST assert that the `.diag` still *produces* the `.cbor`, which comparing the artifact to itself never does.
+
+`CHANGELOG.md` in this directory records every change that moved the artifact, and is the corpus's history — the filename does not carry a version.
 
 **Phase 3a/3b — DEFERRED.** BLAKE3 + ML-DSA-65 seeds not pinned (Phase 3 deferred).
 

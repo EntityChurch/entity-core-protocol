@@ -23,7 +23,7 @@ group = "Overview"
 [[doc]]
 path  = "specs/test-vectors/crypto-agility/README.md"
 title = "Crypto-Agility Conformance Vectors"
-blurb = "Phase 1 (allocation + machinery) and Phase 2 (cross-key / cross-hash matrix) are byte-pinned cross-impl in agility-vectors-v1.diag, with the seed convention in"
+blurb = "Phase 1 (allocation + machinery) and Phase 2 (cross-key / cross-hash matrix) are byte-pinned cross-impl in agility-vectors.diag, with the seed convention in"
 group = "Overview"
 
 # ── Protocol specs ────────────────────────────────────────────────────────────
@@ -74,9 +74,19 @@ group = "Roadmap"
 
 # ── Test vectors ──────────────────────────────────────────────────────────────
 [[doc]]
-path  = "specs/test-vectors/crypto-agility/agility-SEEDS.md"
+path  = "specs/test-vectors/crypto-agility/SEEDS.md"
 title = "Crypto-Agility Conformance Corpus — Seed Pins"
 blurb = "Phase 1 values are byte-equal cross-impl; Phase 2 uses the pinned-seed scheme in §2."
+group = "Test vectors"
+
+# The corpus carries no version stamp, so its history is a file rather than an
+# integer in a filename (GUIDE-CONFORMANCE §5.1). Declaring it is what publishes
+# it — a file that was never public cannot show up as a deletion, so the
+# public-regress gate cannot vouch for it.
+[[doc]]
+path  = "specs/test-vectors/crypto-agility/CHANGELOG.md"
+title = "Crypto-Agility Conformance Corpus — Changelog"
+blurb = "What changed in the corpus, when, why, and which cross-impl round re-blessed it."
 group = "Test vectors"
 
 # ── Status ────────────────────────────────────────────────────────────────────

@@ -1,22 +1,20 @@
 /
-  v7.67 Crypto-Agility Conformance Vectors — v1 corpus
-  Date:       2026-06-10
-  Spec:       ENTITY-CORE-PROTOCOL-V7.md §1.2 (content_hash_format seed table),
+  Crypto-Agility Conformance Vectors
+  Spec:       ENTITY-CORE-PROTOCOL.md §1.2 (content_hash_format seed table),
               §1.5 (key_type seed table), §1.3 (ECF canonical encoding),
               §4.5/§4.5a v7.69 (negotiated format), §1.2/§1.2a v7.70
               (home vs active format).
-  Seeds:      v767/SEEDS.md (single source of truth for every seed pin).
+  Seeds:      SEEDS.md (single source of truth for every seed pin).
   Guide:      GUIDE-CONFORMANCE.md (the cross-impl publication procedure)
-  Status:     Phase 1 LOCKED (byte-pinned cross-impl 2026-06-09, Go × Rust ×
-              Python byte-equal; cohort confirmation in
-              entity-core-go/docs/validation/V7.67-PHASE1-COHORT-CROSS-IMPL-
-              PIN-2026-06-09.md).
+  Status:     Phase 1 LOCKED (byte-pinned cross-impl, Go × Rust ×
+              Python byte-equal; cohort confirmation in the cross-impl
+              pin report).
               Phase 2 RATIFIED-SCHEME (seed convention pinned in SEEDS.md §2;
               byte pins pending cohort round-trip per SEEDS.md §5 step 2).
-              Phase 3a/3b DEFERRED per v7.67 §13.7.
+              Phase 3a/3b DEFERRED.
 
   Format:     CBOR diagnostic notation, RFC 8949 §8. The sibling
-              conformance-vectors-v1.cbor is the canonical-ECF-encoded
+              agility-vectors.cbor is the canonical-ECF-encoded
               build artifact produced from this file by any conformant
               ECF encoder; the encoder MUST produce byte-identical output
               and the lock-points are the inline canonical: h'...' values
@@ -25,7 +23,7 @@
   Categories: Phase 1 = single-axis allocation + machinery (KEY-TYPE-ED448-1,
               HASH-FORMAT-SHA-384-1, VARINT-*, FORMAT-CODE-INTERPRETATION-1).
               Phase 2 = cross-key/cross-hash matrix flow (MATRIX-M2/M3/M6).
-              See v767/README.md §"Vector inventory" for the full register.
+              See README.md §"Vector inventory" for the full register.
 
   Comment markers in this file use the RFC 8949 §8 / comment / form.
 /
@@ -141,7 +139,7 @@
     "expected_status": 400
   },
 
-  / VARINT-RESERVED-FF-1 — integer 255 reserved on both axes per V7 §1.2 / §1.5. /
+  / VARINT-RESERVED-FF-1 — integer 255 reserved on both axes per §1.2 / §1.5. /
 
   {
     "id": "varint-reserved-ff.1.key_type",
@@ -176,7 +174,7 @@
   },
 
   / ─────────────────────────────────────────────────────────────────────── /
-  / PHASE 2 — cross-key/cross-hash matrix (LOCKED, byte-pinned 2026-06-10)   /
+  / PHASE 2 — cross-key/cross-hash matrix (LOCKED, byte-pinned)              /
   / ─────────────────────────────────────────────────────────────────────── /
   / The three matrix vectors share a structural shape: handshake → tree-get
     → cap grant A→B → cap use B→A. Per SEEDS.md §2.2, all three negotiate
@@ -186,21 +184,18 @@
     A's signature is over the cap-token's wire content_hash (RFC 8032
     deterministic).
 
-    Phase-2 byte pins LOCKED 2026-06-10 from 3-way cohort round-trip
+    Phase-2 byte pins LOCKED from 3-way cohort round-trip
     (Go post-fix 3cfb353, Rust d38d1f8, Python a2463be — all byte-equal
     on the 7 gates: pubkeys, peer_ids, home content_hashes, cap-data
     CBOR, active cap content_hash, signature, .cbor sha256). Cohort
-    closeouts: entity-core-go/docs/validation/V767-PHASE2-BYTE-PINS-
-    COHORT-2026-06-10.md (v2 post-fix), entity-core-rust/docs/validation/
-    V767-PHASE2-BYTE-PINS-RUST-2026-06-10.md, entity-core-py/docs/
-    validation/V767-PHASE2-BYTE-PINS-PYTHON-2026-06-10.md.
+    closeouts recorded in the per-impl validation docs.
 
     Empty-scope dimension convention (arch ruling, see
-    reviews/RULING-EMPTY-SCOPE-INCLUDE-2026-06-10.md): an unconstrained
+    reviews/RULING-EMPTY-SCOPE-INCLUDE.md): an unconstrained
     scope dimension is present-with-empty-`include` `{include: []}`
     (CBOR `0x80`), NOT absent and NOT `{include: null}` (`0xf6`). Bound
     by ENTITY-CBOR-ENCODING §232 (fields MUST NOT be dropped) +
-    V7 §3.6 list-of(pattern) typing (null is not a valid value of a
+    §3.6 list-of(pattern) typing (null is not a valid value of a
     list field). The matrix `grants` entries below carry `handlers`
     and `operations` keys explicitly per this ruling.                          /
 
@@ -314,24 +309,16 @@
 
   ,
 
-  / ****  STALE AS OF 2026-08-12 — DO NOT PIN AGAINST THIS SHA  ****           /
-  / The M3/M6 re-stamp (SEEDS.md §5 step 4) landed in THIS .diag and the       /
-  / sibling .cbor has NOT been rebuilt. The two disagree by construction       /
-  / until it is. Build owner is Go per SEEDS.md §4; rust + python confirm.     /
-  / The corpus is NOT lockable and v767-corpus-verify MUST NOT be wired into   /
-  / any gate until the rebuild lands and the cohort re-confirms byte-equal.    /
-  / Re-stamp both copies together — specs/test-vectors/crypto-agility/ is the  /
-  / de-versioned publish form of this directory and its .cbor must stay        /
-  / byte-identical to this one (SEEDS.md §5, 2026-08-12 ruling).               /
+  / Build artifact: agility-vectors.cbor, 10874 B, sha256                      /
+  / b5484e84dd2cddfa7d3cc8a041deba92cb29615aedb2180e31d8b6910ac5b648           /
+  / produced from this .diag by any conformant canonical ECF encoder. The pin  /
+  / has one home — the build owner's corpus registry — and CHANGELOG.md in     /
+  / this directory records every change that moved it.                         /
   /                                                                            /
-  / Superseded sibling .cbor build artifact sha256 (pre-re-stamp):             /
-  / 8e7c5232f64bee83d628679f930c771e4e49f2f1e37d19e41e0d7838e31f982e           /
-  / Regenerated 2026-06-10 (PM) under F16 from this .diag via                  /
-  / tools/regen-v767-cbor.py. Supersedes prior sha 4d8dfced…c6d0ae which       /
-  / carried 58-byte Ed448 seeds, a 63-byte experimental pubkey, and 12         /
-  / Phase-2 expected_* fields as TBD text placeholders. Cohort crypto          /
-  / outputs (the byte pins in this .diag) are unaffected; only the file's     /
-  / input-side widths and Phase-2 expected_* field types change. Closeout:    /
-  / reviews/CLOSEOUT-F16-AGILITY-CORPUS-CBOR-REGEN-2026-06-10.md.              /
+  / 8e7c5232f64bee83d628679f930c771e4e49f2f1e37d19e41e0d7838e31f982e (9236 B)  /
+  / is NOT a stale pin on this file: it is the output of the frozen legacy     /
+  / pair the encoder proof runs against, and it MUST NOT be re-pinned to this  /
+  / .diag as this .diag moves. A proof re-pointed at HEAD asserts only that    /
+  / today's source produces today's output.                                    /
 
 ]
