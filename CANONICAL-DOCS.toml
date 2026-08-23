@@ -85,3 +85,64 @@ path  = "docs/status/STATUS.md"
 title = "Status"
 blurb = "Current project status — where the project is, recent work, backlog, and what's next."
 group = "Overview"
+
+# ── Project files ─────────────────────────────────────────────────────────────
+# These were public at the last release but were never declared, and canon-filter
+# is a KEEP-LIST — so the next release would have DELETED all of them from the
+# public repo. Declaring them is what keeps them. (Found by the arch-tools first
+# full pass, 2026-08-22; the same omission was measured in every repo in the fleet.)
+
+[[doc]]
+path  = "CHANGELOG.md"
+title = "Changelog"
+blurb = "What changed in each release, newest first."
+group = "Project"
+
+[[doc]]
+path  = "CONTRIBUTING.md"
+title = "Contributing"
+blurb = "How to propose a change, and the DCO sign-off the project requires."
+group = "Project"
+
+[[doc]]
+path  = "CODE_OF_CONDUCT.md"
+title = "Code of Conduct"
+blurb = "What we expect of each other."
+group = "Project"
+
+[[doc]]
+path  = "SECURITY.md"
+title = "Security"
+blurb = "How to report a vulnerability."
+group = "Project"
+
+# ── Agent + methodology overlay ───────────────────────────────────────────────
+# Shared, byte-identical, injected fleet-wide (ADR-0010 / ADR-0028). METHODOLOGY.md
+# is contributor-facing and publishes with the repo by ADR-0028; it is NEW to the
+# public surface here, so the public-regress gate cannot vouch for it — a file that
+# was never published cannot show up as a deletion. Declaring it is the only thing
+# that ships it. The other three were already public and stay so.
+
+[[doc]]
+path  = "AGENTS.md"
+title = "AGENTS.md"
+blurb = "The durable agent context and operating agreement for this repo."
+group = "Working here"
+
+[[doc]]
+path  = "AGENTS-STANDARD.md"
+title = "Agent standard"
+blurb = "The shared cross-repo standard every repo's AGENTS.md builds on."
+group = "Working here"
+
+[[doc]]
+path  = "METHODOLOGY.md"
+title = "Methodology"
+blurb = "Disciplines, doctrines, the ratchet, and the promotion ladder (ADR-0028)."
+group = "Working here"
+
+[[doc]]
+path  = "CLAUDE.md"
+title = "CLAUDE.md"
+blurb = "A one-line shim to AGENTS.md (ADR-0016)."
+group = "Working here"
