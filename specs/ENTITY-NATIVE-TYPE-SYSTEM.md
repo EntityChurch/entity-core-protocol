@@ -407,9 +407,9 @@ The complete set of 14 bootstrap types:
 | 12 | `system/tree/path` | Tree path (naming-space address) |
 | 13 | `system/type/name` | Type name (type identity) |
 | 14 | `system/identity/peer-id` | Peer identity (Base58-encoded) |
-| 15 | `entity` | Structural root type (`{type, data}`); content_hash derived per ECF |
+| — | `entity` | Structural root type (`{type, data}`); content_hash derived per ECF. **Primordial — not one of the 14 numbered bootstrap types:** bare `entity` precedes the namespacing entirely and co-arises with the type system (§2.7.1, §3.1.1), so it is bootstrapped *with* the type machinery rather than counted among the namespaced bootstrap types. |
 
-Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup.
+Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup. Bare `entity` (the un-numbered primordial row above) is likewise recognized without tree lookup, but as the co-arising structural root (§3.1.1), not as one of the 14 namespaced bootstrap types — which is why the count is 14, not 15 (v7.76 / F37: reconciles the prior 14-title-vs-15-row mismatch, keystone `A-PD-012`; the two dangling `system/peer.peer_id` refs at §10.1 / Appendix B are repointed to the canonical `system/identity/peer-id` in the same pass).
 
 ### 4.5 system/hash
 
@@ -1450,7 +1450,7 @@ Represents a peer's cryptographic identity. (Renamed from `system/identity` in v
   "data": {
     "name": "system/peer",
     "fields": {
-      "peer_id":    {"type_ref": "system/peer-id"},
+      "peer_id":    {"type_ref": "system/identity/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"}
     }
@@ -2396,7 +2396,7 @@ Complete protocol and supporting type definitions in CBOR diagnostic notation. T
   "data": {
     "name": "system/peer",
     "fields": {
-      "peer_id":    {"type_ref": "system/peer-id"},
+      "peer_id":    {"type_ref": "system/identity/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"}
     }
