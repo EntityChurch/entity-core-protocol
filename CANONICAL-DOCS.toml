@@ -90,11 +90,11 @@ blurb = "What changed in the corpus, when, why, and which cross-impl round re-bl
 group = "Test vectors"
 
 # ── Status ────────────────────────────────────────────────────────────────────
-[[doc]]
-path  = "docs/status/STATUS.md"
-title = "Status"
-blurb = "Current project status — where the project is, recent work, backlog, and what's next."
-group = "Overview"
+# NOT DECLARED, deliberately. `docs/status/` publishes nothing ([ADR-0031]) —
+# STATUS.md included, which used to be the one exception. It is public today, so
+# undeclaring it is a removal against the published tree and is recorded in
+# `.release-removals` with the reasoning. A rolling status file is working memory;
+# its candor is the point, and candor does not survive an audience.
 
 # ── Project files ─────────────────────────────────────────────────────────────
 # These were public at the last release but were never declared, and canon-filter
