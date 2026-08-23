@@ -97,8 +97,8 @@ record. With it, it is a learning record — and the learning is the point.
 change ships green; it breaks in a configuration the suite never exercises; the symptom is
 diffuse and mislabeled because the failure surface is silent; we theorize about the substrate
 instead of tracing a value; the user finds the edge case in the real world and reports it; we
-react; go to 1. The user's own words for it: *"waiting for me to find every goddamn edge case
-and come back and tell you to fix it — that's not working."* And the cost compounds — **adding
+react; go to 1. The user's own words for it: *"waiting for me to find every edge case and come
+back and tell you to fix it — that's not working."* And the cost compounds — **adding
 a feature has been making us weaker.**
 
 The ratchet is the only thing that reverses that sign.
@@ -388,7 +388,7 @@ anti-pattern catalog, and an audit doctrine — so drift there is invisible the 
 invisible in go.
 
 **Arch assembled and ratified this set on 2026-08-15** — `entity-system-architecture/docs/DISCIPLINE-CHARTER.md`
-(arch `890ce2b`) is the canonical home. The table below is the ecosystem-visible summary; **the
+is the canonical home. The table below is the ecosystem-visible summary; **the
 charter wins on its own content.** Three corrections came back from that ratification and are folded
 in here, because meta drafted these as `A1–A6` and got three things wrong:
 
@@ -411,9 +411,9 @@ in here, because meta drafted these as `A1–A6` and got three things wrong:
 | **L5** | **Spec text is not our log** | **Ratified** · gated | Ratcheted in `.spec-baseline.json`: **489 findings across 30 normative specs**; new violations gate |
 | **L6** | **Resolve divergence from the table, before the fix is written** | **Candidate** — one incident, and it is in a peer's tree | go's F-1: a three-way divergence resolved by majority when the doctrine says *all three differ = spec ambiguity, tighten the spec*. **A fix whose justification includes a count of implementations is the smell.** |
 
-**The L1 gate — `spec provenance`, arch-tools `718f0d5`, warn-level.** Meta's routed sketch keyed
+**The L1 gate — `spec provenance`, in arch-tools, warn-level.** Meta's routed sketch keyed
 on the `**Version**` header changing. Arch measured it against the two normative folds landed the
-same day — `80d3ca2` (+2 MUSTs) and `40586c5` (+4 MUSTs) — and **both changed zero version
+same day — one adding 2 MUSTs, one adding 4 — and **both changed zero version
 headers**, correctly, under arch's standing *cohort findings fix the spec in place, no rev bump*
 carve-out. **A version-triggered gate is silent on precisely the class arch uses most.** The shipped
 trigger is two-part: the version header changed, **or the file's count of normative tokens changed
