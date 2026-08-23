@@ -1491,11 +1491,30 @@ system/peer/status := {
                   ; ms since epoch, last message received
     connection:   {type_ref: "system/tree/path", optional: true}
                   ; Path to connection entity (system/connection/{peer_id})
+    reason:       {type_ref: "primitive/string", optional: true}
+                  ; Why the status last changed. Kebab enum; the vocabulary and
+                  ; its recovery mapping belong to EXTENSION-NETWORK (Amendment
+                  ; 12 §A2/§A6.4). A reader MUST treat an unrecognized value as
+                  ; generic and fall back to backoff (MUST-ignore-unknowns).
+    last_error:   {type_ref: "primitive/string", optional: true}
+                  ; Coded/opaque detail for humans and logs. NEVER parsed.
+    failing_since:{type_ref: "primitive/uint", optional: true}
+                  ; ms since epoch. Set on the transition INTO suspect/
+                  ; disconnected; cleared on the transition back to connected.
+                  ; One record per failure EPISODE, never one per retry attempt.
   }
 }
 ```
 
 Stored at `system/peer/status/{peer_id}`. State transitions: `(unknown) → connected → suspect → disconnected`. Reconnection returns to `connected`. The `connection` field is a path reference to the corresponding `system/connection` entity.
+
+**This entity is the single canonical declaration home for its own shape.** Consumer extensions describe *when* it is written and *what the values mean*; they do not re-declare the field set. Their put-sites are **minimal writes, not exhaustive shapes** — a bare `{peer_id, status}` write is conformant, and no implementation derives the type shape from an example write. *(Two specs each declaring fields on one entity type is how implementations end up with two shapes; that is the concrete failure this note exists to prevent.)*
+
+**`reason`, `last_error`, `failing_since` (0.8.1, additive).** All three OPTIONAL and omitted when unpopulated, so a peer that never sets them emits byte-identical entities to the pre-0.8.1 shape. **No wire change, no renumber, no new error code.** They are declared here rather than in the extension that gave them meaning, because this is where the type is declared.
+
+**`failing_since` is transition-written, and that is load-bearing.** It records the *episode*, not the attempt: set once when the peer leaves `connected`, cleared once when it returns. Retry `attempt` and `next_attempt_at` are **derived** from `(failing_since, now, backoff-config)` and MUST NOT be stored — storing them would mean a tree write per retry attempt, and every write to this entity fans out to every lifecycle subscriber. The derivation is pinned by the consuming extension (`EXTENSION-NETWORK` Amendment 12 §A6.5), because an unpinned derivation relocates a divergence rather than removing it. A durable `failing_since` is also what lets a restarting peer resume at the correct backoff escalation instead of dropping back to its minimum.
+
+*Adopted from three-way convergence rather than legislated ahead of it: `entity-core-go`, `entity-core-rust` (`1152d35`) and `entity-core-py` (`ad0ef98`) each stamp `failing_since`, **measured on the wire 3-of-3** on 2026-08-13 (`network_reconnect_anchor` PASS, 5/5 with 0 skips per seat; reported by `entity-core-go` at `a02ab5e`, whose own check had been holding this at WARN on a stale build-state comment). The field was live in three interoperating implementations and in no landed spec — the same shape as the `chain_id` defect corrected the same day, caught one step earlier.*
 
 ```
 system/peer/self/status := {
