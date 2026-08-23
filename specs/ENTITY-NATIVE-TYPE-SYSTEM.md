@@ -409,7 +409,7 @@ The complete set of 14 bootstrap types:
 | 14 | `system/identity/peer-id` | Peer identity (Base58-encoded) |
 | — | `entity` | Structural root type (`{type, data}`); content_hash derived per ECF. **Primordial — not one of the 14 numbered bootstrap types:** bare `entity` precedes the namespacing entirely and co-arises with the type system (§2.7.1, §3.1.1), so it is bootstrapped *with* the type machinery rather than counted among the namespaced bootstrap types. |
 
-Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup. Bare `entity` (the un-numbered primordial row above) is likewise recognized without tree lookup, but as the co-arising structural root (§3.1.1), not as one of the 14 namespaced bootstrap types — which is why the count is 14, not 15 (v7.76 / F37: reconciles the prior 14-title-vs-15-row mismatch, keystone `A-PD-012`; the two dangling `system/peer.peer_id` refs at §10.1 / Appendix B are repointed to the canonical `system/identity/peer-id` in the same pass).
+Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup. Bare `entity` (the un-numbered primordial row above) is likewise recognized without tree lookup, but as the co-arising structural root (§3.1.1), not as one of the 14 namespaced bootstrap types — which is why the count is 14, not 15 (0.8.1 / F37: reconciles the prior 14-title-vs-15-row mismatch, keystone `A-PD-012`; the two dangling `system/peer.peer_id` refs at §10.1 / Appendix B are repointed to the canonical `system/identity/peer-id` in the same pass).
 
 ### 4.5 system/hash
 

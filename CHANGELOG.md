@@ -9,7 +9,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 - Initial public research-preview release.
 
-### Changed — spec amendment bundle v7.76 (keystone cross-substrate hardening, before-freeze)
+### Changed — spec amendment 0.8.1 (keystone cross-substrate hardening, before-freeze)
 
 Non-functional hardening + prose/status reconciliations surfaced by the `entity-core-keystone` cross-substrate
 conformance sweep (findings F31–F48 + the RT-/W hand-offs). **No wire renumber, no new opcode, no V8 semantic
@@ -33,7 +33,7 @@ next generated peer and pinning impls on a stale reading. Applied to `ENTITY-COR
 editorial one-liners (F36, format_code=128, F45, F33, F46, RT-10) are tracked follow-ons. Ratifies on the 28-peer
 cohort re-run. Determination: `entity-system-architecture/docs/research/reviews/ABSORPTION-keystone-findings-F31-F46-and-named-handoffs.md`.
 
-### Added — non-interactive freshness knobs, W7 (rides the v7.76 cohort re-run)
+### Added — non-interactive freshness knobs, W7 (0.8.1 — same cohort re-run)
 
 Additive, deployment-elected freshness knobs — the §4.10 "declare and enforce a finite bound; the value is the
 deployment's call" pattern applied to freshness. No wire renumber, no new opcode. Applied to `ENTITY-CORE-PROTOCOL.md`:
@@ -44,7 +44,7 @@ deployment's call" pattern applied to freshness. No wire renumber, no new opcode
 
 Design: `entity-system-architecture/docs/research/explorations/EXPLORATION-NON-INTERACTIVE-FRESHNESS-AND-ANTI-REPLAY.md` + `ANALYSIS-NON-INTERACTIVE-FRESHNESS-CRITICALITY.md`.
 
-### Changed — cross-peer continuation bound (v7.76; folds the built+green-3-way continuation/bounds work)
+### Changed — cross-peer continuation bound (0.8.1; folds the built+green-3-way continuation/bounds work)
 
 The continuation/network runtime is built and conformance-green three-way; these core-protocol deltas fold the
 spec text up to the shipped wire. `chain_depth` is additive (MUST-ignore-unknown, beside `cascade_depth`) — no
