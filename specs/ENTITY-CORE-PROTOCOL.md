@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.2.3
+**Version**: 0.8.2.8
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md
@@ -830,11 +830,11 @@ Status codes:
 | 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`. `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
 | 401 | Authentication failed (also: `capability_revoked` per `EXTENSION-ROLE.md` §5.5; `unresolvable_grantee` per §5.5 of this doc — cap's `grantee` does not resolve to a present `system/peer` entity) |
 | 403 | Forbidden — request-time authorization DENY (§5.2). Default `code` = `capability_denied`; more-specific authorization codes: `scope_exceeds_authority` (capability handler request subset-validation, §6.2). See §5.2 verdict-to-status mapping. |
-| 404 | Not found |
+| 404 | Not found. Default `code` = **`handler_not_found`** — no handler is registered at the resolved path (§6.5), **on a path that targets the local peer**. §6.2 is the defining home for this code and this row is its restatement. Distinct from 501, where a handler IS registered and the named operation is not implemented; distinct also from a 404 raised **inside** a registered handler because the requested entity, binding or hash is absent — that is a domain outcome carrying the domain's own code, not this row (0.8.2.7). A path targeting a foreign namespace is neither: it is refused at canonicalization with `400 invalid_request` (§1.4, §5.2a, §6.5 step 3). |
 | 409 | Conflict (duplicate_request_id, path_exists) |
 | 429 | Rate limited |
-| 500 | Internal error |
-| 501 | Not supported |
+| 500 | Internal error. Default `code` = **`internal_error`** — an internal step failed and no more-specific defined code applies (0.8.2.6). More-specific 500 codes where one applies (0.8.2.8): `io_error` — an operating-system I/O operation failed (`stat`, `read`, `write`, `mkdir`, `readdir`, `delete`); `storage_error` — a content-store or tree bind/read failed. The two are distinct conditions and are not interchangeable: a filesystem failure in a local-files handler is `io_error`, a store failure anywhere is `storage_error`. |
+| 501 | Not supported. Default `code` = **`unsupported_operation`** — a handler IS registered at the path and does not implement the named operation (§6.2). **`unknown_operation` is a synonym and MUST NOT be emitted** (0.8.2.6). |
 | 503 | Service unavailable |
 
 Error responses use `system/protocol/error` as the result entity type:
@@ -849,6 +849,15 @@ system/protocol/error := {
 ```
 
 Error codes are scoped per handler — connection errors (§4.7), tree errors (EXTENSION-TREE.md Appendix A), and domain handler errors each define their own `code` values. The `status` field on EXECUTE_RESPONSE provides the numeric category; `result.data.code` provides the specific error within that category.
+
+**Default-code force and the code slot (normative, 0.8.2.7).** Where a row above names a **default `code`**, that code is **mandatory for the generic case** at that status: when a response carries the status and no more-specific defined code applies, `result.data.code` MUST be the named default. The generic case is the one with no other information in it, so it is exactly the case a caller cannot branch on unless the spelling is fixed. A **more-specific code MAY** be used only where one is **defined for the operation in a spec code set** — §4.7 for connection errors, `EXTENSION-TREE.md` Appendix A for tree errors, or the owning domain handler's own error-code table. An **undefined spelling is non-conformant**: this is the *Authorization-path code discipline* paragraph below (*"MUST NOT surface a generic catch-all default … the catch-all is a sign that an authorization failure escaped its defined code"*) stated for every row rather than for the authorization path alone. The **unit of conformance is the code slot** — the set of `code` values an implementation emits at a given status — and **never a single spelling**: an implementation satisfies a row when every generic emit at that status carries the default, so retiring one synonym while a second remains in the same slot does not satisfy it.
+
+**Satisfaction mode (normative, 0.8.2.7; per GUIDE-CONFORMANCE §5.2b.1).** The rows differ in what can drive them, and a check MUST NOT be pinned to a row it cannot reach:
+
+- **501** — drivable over the wire: dispatch an operation absent from a registered handler's manifest.
+- **404** — drivable over the wire: dispatch to a path where no handler is registered, targeting the local peer. The foreign-namespace input is a different row (§5.2a). **Exception — the total handler (0.8.2.8):** at a peer that registers a catch-all pattern, **no unregistered path exists**, so the row's input is unconstructible and the probe reaches the catch-all instead. Such a peer is conformant; the check MUST record a **declared SKIP naming the catch-all**, and MUST NOT report the fallback's answer as a failure of this row.
+- **500** — **not drivable by a conformance client.** A conformant peer cannot be made to fail internally on demand over the wire, so this row is satisfied by a **source audit** of the implementation's emit sites at a named commit, not by a `validate-peer` check.
+- **400 / 403** — by the enumerated specific sets and the authorization-path paragraph below.
 
 **Authorization-path code discipline (normative, v7.71).** A request-time authorization `DENY` (§5.2) MUST be surfaced with `status` per §5.2 (403 default; the single `unresolvable_grantee → 401` carve-out plus the `capability_revoked → 401` in-flight cascade carve-out per EXTENSION-ROLE.md §5.5) and `result.data.code` set to the authorization domain's defined code — `capability_denied` by default, or a more-specific defined authorization code (`scope_exceeds_authority`, `unresolvable_grantee`, `capability_revoked`) where one applies. Implementations MUST NOT surface a generic catch-all default (e.g. `verification_failed`) on an authorization path; the catch-all is a sign that an authorization failure escaped its defined code. Capability expiry (§5.6 / §5.2 validity check) surfaces as the default `capability_denied` — there is no separate `capability_expired` string. The §3.3 status row is the single source of truth for `status`; the authorization codes live in their domain homes (§5.2, §6.2, EXTENSION-ROLE.md §5.5); this paragraph and the §3.3 403 row pointer keep them paired without spawning a parallel registry. Enforcement vectors: GUIDE-CONFORMANCE §9 capability-handler row, `AUTHZ-*` matrix.
 
@@ -1640,7 +1649,16 @@ The initiator sends EXECUTE hello; the responder replies with EXECUTE_RESPONSE c
 
 ### 4.2 Pre-Authorization Rules
 
-- `system/protocol/connect` is the sole pre-authorized path.
+- `system/protocol/connect` is the sole pre-authorized path, **in any connection state — before and
+  after establishment (0.8.2.6)**. §3.3 is the authority: *"All EXECUTE requests MUST include `author`
+  and `capability` — **except** requests targeting the connection path (§4)"*, an exception on the
+  **path** carrying no state qualifier. §5.1's author/capability requirement is scoped to every
+  *authenticated* EXECUTE, and that is the class §3.3 defines by excluding this path — so a
+  post-establishment `ping` bearing no `author`, no `capability` and no signature MUST be served, and a
+  responder MUST NOT refuse it for their absence. The connection already carries both peers'
+  authenticated identities (§4.6); re-proving that identity on every keepalive is what putting `ping`
+  on the pre-authorized path exists to avoid. (0.8.2.6 — the state qualifier was absent and §5.1 was
+  read as the general rule with this bullet as its exception, which is the wrong way round.)
 - EXECUTE targeting this path MUST be accepted without `author` or `capability` fields.
 - EXECUTE targeting any other path without valid authentication MUST be rejected per §5.2a: a missing/unverifiable `author` or signature is auth-class **401**; an authenticated request lacking a covering capability is authz-class **403** (0.8.1, F32 — this rule previously said a blanket 403, contradicting §4.4/§5.2a).
 - The connection handler MUST enforce ordering: `hello` before `authenticate`. An `authenticate` received before a hello nonce has been issued MUST be rejected with status **401 `invalid_nonce`** (§4.6 step 1; §4.7's row 6) — it is an authentication failure, not a malformed request, because a captured `authenticate` replayed onto a fresh connection is exactly this input. It is **not** §4.7's out-of-order row (0.8.2.1, FM-1 — this bullet previously stated the ordering obligation with no status or code, and §4.7's "out-of-order operation" row was the only lexical match for it).
@@ -1780,6 +1798,10 @@ Each grant is self-describing: `handlers` says which handler can be called, `res
 
 If `hash_formats` is absent, defaults to `["ecfv1-sha256"]`. If `key_types` is absent, defaults to `["ed25519"]`.
 
+**`protocols` names §8.4's identifiers, and has no absent arm (normative, 0.8.2.4).** The values intersected are the protocol version identifiers defined in §8.4 — today the single value `entity-core/1.0`. This is the one negotiated field whose vocabulary is not stated at the negotiation site, and a field that is read by nothing cannot reveal a wrong value: a peer advertising an identifier that resembles this document's *section* numbering rather than §8.4's protocol version is well-formed, silently non-interoperable, and undetectable until the intersection is first enforced.
+
+Unlike `hash_formats` and `key_types`, `protocols` is **Required with no default**, so there is no floor to fall back to. A hello carrying **no `protocols` field, or an empty list, MUST be rejected with `400 invalid_request`** — it is a malformed request, not a version incompatibility. `400 incompatible_protocol` (§4.7) is reserved for a **non-empty** set that does not intersect the responder's: that code tells the caller *"we compared and share nothing,"* and a caller that named no version cannot be told the comparison failed. The remedies differ — send the field versus change the version — and §4.7 exists so the code selects the remedy.
+
 **Negotiation**: Each hello field that is an array of options represents capabilities the peer supports, listed in preference order. The responder computes the relationship between the two lists upon receiving the initiator's hello and includes its own hello data in the EXECUTE_RESPONSE. If a required field cannot be satisfied, the responder returns an error EXECUTE_RESPONSE (see §4.7).
 
 Two negotiation shapes apply, because the fields differ in whether they are **identity-bound**:
@@ -1793,7 +1815,7 @@ Two negotiation shapes apply, because the fields differ in whether they are **id
 
 | Field | Required | Default | Negotiation |
 |-------|----------|---------|-------------|
-| `protocols` | Yes | — | Intersection, must be non-empty |
+| `protocols` | Yes | — | Intersection of the §8.4 protocol version identifiers (`entity-core/1.0`), must be non-empty. **Absent or empty is a malformed hello — `400 invalid_request` (0.8.2.4)** |
 | `hash_formats` | No | `["ecfv1-sha256"]` | **Single active value** — first match in initiator order; the connection's active `content_hash_format` (§4.5a) |
 | `key_types` | No | `["ed25519"]` | **Accept-set** — each peer's own `key_type` must be in the other's set (mutual verifiability); each peer signs with its own |
 | `compression` | No | none | Single active value; empty = no compression |
@@ -1861,6 +1883,8 @@ envelope.included[signature_entity.content_hash] = signature_entity
 
 The responder MUST also verify `authenticate.peer_id == hello.peer_id` for the same connection (the connection's claimed identity does not change mid-handshake; combined with step 3 this binds the whole handshake to one key).
 
+**The numbering is a normative order (0.8.2.4).** The steps above are evaluated in the order given, and **for an input that fails more than one step the responder MUST emit the code of the lowest-numbered failing step.** An implementation MAY perform the underlying work in any order it likes — the constraint is on the emitted `(status, code)`, not on the internal sequence — but it MUST NOT report a later step's failure for an input that already fails an earlier one. Without this, the same input yields `401 authentication_failed` from one conformant responder and `401 identity_mismatch` from another, which is a cross-peer-observable divergence in a table §4.7 declares to be a MUST-emit contract. Step 0's placement is an instance of this rule rather than an exception to it.
+
 **Connection-auth is the authentication boundary (status).** All proof-of-possession failures above (nonce mismatch, absent/invalid signature, identity mismatch) are **authentication** failures and MUST be reported with status **401**, and the responder MUST emit the coded `401` EXECUTE_RESPONSE **before** closing the connection (§4.1's "every EXECUTE receives an EXECUTE_RESPONSE" — a bare socket close is indistinguishable from a network fault and is non-conformant on connect-auth failure). After the connection is established, verification of authenticated EXECUTEs (`verify_request`, §5.2) is **authorization**: a `DENY` is reported with **403**, except `unresolvable_grantee` which remains **401** (§3.6 / §5.5).
 
 **Hardening (SHOULD).** The responder SHOULD recompute the authenticate entity's content hash from its `{type, data}` before using it as the signature target, rather than trusting the wire-supplied `content_hash` (consistent with §5.2 validate-before-trust). The issued nonce **MUST** be a fresh, unpredictable ≥32-byte CSPRNG value per connection and **MUST** be single-use — a responder MUST NOT accept a second `authenticate` against the same issued nonce, and MUST invalidate the issued nonce on connection-state transition. The **anti-replay property is the MUST; the mechanism is impl-defined** — explicit nonce-invalidation or tracking the connection's post-handshake established state both satisfy it. **The rejection of a replayed/second `authenticate` MUST use status `401 invalid_nonce`** (a consumed nonce is no longer the valid issued nonce — consistent with §4.6's authentication boundary; a `409`/state-conflict status under-signals a replay and is non-conformant here). (0.8.1, RT-6 — elevated from SHOULD; the nonce is the *interactive*-handshake anti-replay mechanism, scoped to §4.6. Non-interactive freshness — relay / one-way cap re-verification / async revocation — is a separate surface governed by content-addressing + capability TTL/`expires_at` + revocation convergence, not the nonce). `hello.timestamp` is informational, not an anti-replay input. The responder SHOULD validate `public_key` length against `key_type` up front (one rejection path for a malformed key); the `key_type`-support MUST is now the ordered **step 0** of the proof-of-possession checks above.
@@ -1873,20 +1897,61 @@ This table is a **normative MUST-emit contract**: clients key error handling off
 
 | Failure | result.data.code | Status |
 |---------|------------|--------|
-| Incompatible protocol versions | `incompatible_protocol` | 400 |
+| Non-empty `protocols` set that does not intersect the responder's (§4.5) | `incompatible_protocol` | 400 |
 | No common hash formats | `incompatible_hash_format` | 400 |
-| No common key types | `incompatible_key_type` | 400 |
-| Unsupported / unknown key type | `unsupported_key_type` | 400 |
-| Unsupported `content_hash_format` (v7.66 §1.2 dispatch) | `unsupported_content_hash_format` | 400 |
+| Unsupported / unknown key type, **including a `key_types` accept-set that excludes the responder's own** (§4.5 mutual verifiability) | `unsupported_key_type` | 400 |
+| Unsupported `content_hash_format` — **§1.2 ingest dispatch, not a handshake step** (see below) | `unsupported_content_hash_format` | 400 |
 | Nonce mismatch / absent / pre-hello (§4.6 step 1) | `invalid_nonce` | 401 |
 | Absent or invalid authenticate signature (§4.6 step 2) | `authentication_failed` | 401 |
 | `peer_id` not derived from `public_key`, or `hello`/`authenticate` peer_id mismatch (§4.6 step 3) | `identity_mismatch` | 401 |
 | Connection already established | `connection_already_established` | 409 |
-| Out-of-order operation — e.g. a second `hello` after `hello_done`, or an unknown connect operation. **Not** a pre-hello `authenticate` (see below) | `connection_sequence_error` | 400 |
+| Out-of-order operation — a connect operation the responder implements, arriving in a state that forbids it (e.g. a second `hello` after `hello_done`). **Not** a pre-hello `authenticate` (see below) | `connection_sequence_error` | **409** |
+| **Unknown connect operation** — an operation name the responder does not implement, in any state | `invalid_request` | 400 |
 
 The responder MUST emit the coded error EXECUTE_RESPONSE before closing the connection on any of the above (§4.6 status boundary). `invalid_signature` (the pre-v7.61 spelling for the step-2 failure) is superseded by `authentication_failed`; impls emitting `invalid_signature` for a connect-auth signature failure should migrate.
 
+**`invalid_request` — the generic malformed-request code (normative, 0.8.2.4).** A well-formed frame whose *content* the responder cannot act on as a request — an unknown connect operation, a missing or empty required negotiation field (§4.5), an EXECUTE naming a foreign namespace (§1.4) — is refused **`400 invalid_request`**. It is the complement of the coded failures above: those name *what specifically went wrong* in a handshake the responder understood; this names a request it could not take as one. Extension specifications use this code for the same class and MUST NOT mint a synonym.
+
+**A state conflict is 409; an unknown operation is 400 (0.8.2.4).** The out-of-order row previously carried both and gave them one code and one status. They are different failures with different remedies: a second `hello` after `hello_done` is an operation the responder implements, refused because of connection state — the same class as `connection_already_established` directly above it, and it takes the same **409**. An unknown connect operation is not out of order at all; it exists in no state, so reporting `connection_sequence_error` points the caller at its *ordering* when the defect is its *operation name*. Because clients key error handling off `result.data.code`, a code that selects the wrong remedy fails the contract this table exists to provide.
+
+**The half-open connection is an out-of-order state, and it is named here because neither neighbouring rule reaches it (0.8.2.8).** A connection that has completed `hello` but not `authenticate` is **half-open**: it is *not* established. The out-of-order row above governs it — a connect operation the responder implements, arriving in a state that forbids it — so an unauthenticated `ping` on a half-open connection is **409 `connection_sequence_error`**. This is stated because two adjacent rules each *look* like they cover it and neither does: the `invalid_nonce` row is scoped to a pre-**hello** `authenticate` (§4.6 step 1), and the pre-authorized-connect exception (§3.3 line 773 / §5.1) is scoped to an **established** connection, which a half-open one is not. All three ground-up implementations answer 409 correctly by construction; the row is made explicit so the behaviour is pinned by text rather than by three independent derivations.
+
+**Row 5's surface is ingest, not the handshake.** `unsupported_content_hash_format` is the §1.2 format-dispatch refusal and is reachable on any frame carrying an unallocated format code. It is listed here because it can be observed during a connection, not because the handshake has a step that produces it; no connect-path step dispatches on `content_hash_format`, and a conformance check MUST NOT treat it as a handshake obligation.
+
+**Retired: `incompatible_key_type`.** The row reading *"no common key types"* described an intersection model §4.5 no longer uses. `key_types` is an **accept-set** governed by mutual verifiability, not a value collapsed by intersection, so there is no "common key type" to fail to find; the failure is that a peer cannot verify the algorithm the other's identity is bound to, which is `unsupported_key_type`. Implementations MUST NOT emit `incompatible_key_type`.
+
 An `authenticate` arriving before any hello nonce was issued is **not** the out-of-order row: it is pinned to **401 `invalid_nonce`** by §4.2, §4.6 step 1 and row 6 above. A captured `authenticate` replayed onto a fresh connection is exactly this input, so it is an authentication failure and not a malformed request — the same status the Hardening block pins for a replayed `authenticate` on an established connection. (0.8.2.1, FM-1 — the out-of-order row's example previously named the pre-hello `authenticate`, contradicting §4.6 step 1 and row 6 of this table; §4.2 stated the ordering obligation with no status or code, and this row was the only lexical match for it.)
+
+**A non-connect EXECUTE arriving before the connection is established is not in this table (0.8.2.5).**
+Every row above describes a **connect** operation. An EXECUTE naming any other path, arriving before the
+handshake completes, is governed by **§4.2's third pre-authorization rule** and **§5.2a**: it carries no
+verified signer, so it is **auth-class** and MUST be refused **401 `authentication_failed`**. This is not
+a new obligation — §4.2 has said it since **0.8.1**, where F32 replaced that bullet's blanket `403` with
+the auth/authz discriminator. It is restated here because §4.7 is the table an implementer is reading
+when the input arrives, and a rule stated only in the vocabulary of *pre-authorization* is not findable
+from the vocabulary of *connection state*. §4.2 remains the authority; this note is a pointer, not a
+second registry, and the input is not a connection-handshake failure to which the precedence rule above
+applies. **Implementations MUST NOT emit `connection_required` or `handshake_failed`** — both are minted
+codes in no spec code set, on the `incompatible_key_type` and `invalid_signature` precedent above, and
+both were observed standing in for this rule.
+
+**Address is evaluated before authentication (0.8.2.6).** The rule above and the `invalid_request`
+paragraph both reach a pre-establishment EXECUTE that names a **foreign** namespace. The address
+answers first:
+
+| Pre-establishment EXECUTE | `result.data.code` | Status |
+|---|---|---|
+| `system/protocol/connect` | this table's rows | — |
+| Own namespace, non-connect | `authentication_failed` | 401 |
+| **Foreign namespace** | **`invalid_request`** | **400** |
+
+A `401` directs the caller to authenticate and retry, and for a foreign-namespace address that retry
+cannot succeed at any authentication state — so the `401` names a remedy that does not exist, which is
+the failure the split above this note was made to prevent. The address refusal is also a property of
+the frame rather than of the sender: §6.5 step 3 calls it *"a gate, not an ordering preference"* and
+says the request *"never becomes an authorization question,"* and §1.4 records that the downstream
+permission check is **unreachable** on this path. Authentication state cannot change the answer, so
+evaluating it first can only mislead.
 
 ### 4.8 Inbound frame processing concurrency
 
@@ -3072,7 +3137,7 @@ Implementations MUST provide the tree, handlers, connection, **and capability** 
 **Capability handler operation status codes.** A capability handler that registers but does not implement an operation MUST return status **501 `unsupported_operation`** for that operation. The three status codes the handler emits are distinct:
 
 - **`404 handler_not_found`** — no handler is registered at the dispatch path, **on a path that targets the local peer**. The peer has no notion of the operation at all. *(0.8.2.2 — scope clarification.)* A path targeting a **foreign** namespace is **not** this case: it is refused earlier, at §1.4 canonicalization (§6.5 step 3), with **400 `invalid_request`**, and MUST NOT be reported as `handler_not_found`. The distinction is observable and load-bearing — `404` here asserts *"this peer has no such handler"*, which is false of a peer that has the handler and is refusing the **address**; reporting the refusal as `404` tells a caller to stop asking for a handler that exists.
-- **`501 unsupported_operation`** — a handler IS registered at the path, but does not implement the named operation. The caller's authority is irrelevant; the operation does not exist on this handler.
+- **`501 unsupported_operation`** — a handler IS registered at the path, but does not implement the named operation. The caller's authority is irrelevant; the operation does not exist on this handler. **This sentence is general and is not scoped to the capability handler (0.8.2.6).** It states the rule for *any* handler; §3.3's 501 row is the authority and this is its restatement at the site that motivated it. **`unknown_operation` is a minted synonym and MUST NOT be emitted** — on the `incompatible_key_type` / `invalid_signature` precedent. (The heading above scopes this subsection to the capability handler, and the scope was read onto the rule: two implementations emit `400 unknown_operation` from every non-capability handler — a different status *and* a different code for the failure this line governs.)
 - **`403 scope_exceeds_authority`** — a handler is registered and supports the operation, but the caller's authority does not cover the request (or, on `request`, the requested grants exceed the caller's authenticated cap or the matched policy entry).
 
 501 here is a deliberate semantic stretch on HTTP 501 ("method not supported by origin server") vs HTTP 405 ("method not allowed for target resource"); 405 is reserved for HTTP-level method routing in transport bridges. Both are real HTTP codes; no new code is minted.
@@ -4176,7 +4241,12 @@ A peer claims a **conformance profile** when it presents itself to a conformance
 - Validate total hash byte length matches format code (§1.2)
 - Path validation (§1.4) — no null bytes, no leading slash, no empty segments
 - Dispatch routing (§1.4) — reject an inbound EXECUTE targeting a non-self peer_id with **400 `invalid_request`** (0.8.2.2 names the code; the status was already pinned). The refusal runs at canonicalization, **before** handler resolution and before `check_permission` (§6.5 step 3), so it is pre-authorization: it MUST NOT be reported as `404 handler_not_found` (§6.2) or `403 capability_denied`, and MUST NOT be reached by resolving a local handler for the foreign path and letting §5.2 decide. Enumerated in the §5.2a pre-dispatch row; driven by `dispatch_inbound_foreign_namespace_refused`
+- **Unimplemented operation on a registered handler** (§3.3 501 row, §6.2) — dispatching an operation absent from a registered handler's manifest emits **501 `unsupported_operation`**. The code slot at 501 carries no synonym **of this row**: `unknown_operation`, `not_implemented`, `not_supported` and `not_available` are all non-conformant spellings of it (0.8.2.7). Distinct from 404, where no handler is registered, and from 403, where the caller's authority is the failing input. **A domain code defined for a different failure that also answers 501 is not a synonym and is not blacklisted (0.8.2.8)** — `unsupported_mode` (`EXTENSION-REGISTRY` §6a.9.2, live registration under a stored but unenforceable `domain-control` policy) is the worked case: the handler is registered and the operation *is* implemented, so it is not this row at all. The test is the failure named, never the status shared
+- **No handler at the dispatch path** (§3.3 404 row, §6.2) — dispatching to a path with no registered handler, **on a path targeting the local peer**, emits **404 `handler_not_found`** (0.8.2.7). A 404 raised inside a registered handler for an absent entity, binding or hash is a domain outcome and is not this row; a path targeting a foreign namespace is refused earlier with **400 `invalid_request`** (§5.2a)
 - Connection handler ordering enforcement (§4.2) — hello before authenticate; an `authenticate` before a hello nonce was issued emits **401 `invalid_nonce`** (§4.6 step 1, §4.7 row 6), never `connection_sequence_error`
+- Protocol negotiation (§4.5) — a hello whose non-empty `protocols` set does not intersect the responder's emits **400 `incompatible_protocol`**; a hello with `protocols` **absent or empty** emits **400 `invalid_request`**. The identifiers intersected are §8.4's
+- Connect operation validity (§4.7) — an operation the responder implements, arriving in a forbidden state, emits **409 `connection_sequence_error`**; an operation it does not implement emits **400 `invalid_request`**
+- Proof-of-possession step order (§4.6) — for an input failing more than one numbered step, the emitted code is the **lowest-numbered** failing step's
 - Connection uniqueness (§4.2) — reject subsequent connection requests with status 409
 - Connect-time proof-of-possession (§4.6) — nonce-echo (401 `invalid_nonce`), signature verification against `authenticate.public_key` (401 `authentication_failed`), and peer_id↔public_key identity binding (401 `identity_mismatch`); `hello`/`authenticate` peer_id equality on the same connection
 - Auth boundary status (§4.6, §5.2, §8.3) — connect-auth failures emit coded 401 *before* close; request-time `verify_request` DENY maps to 403 (except `unresolvable_grantee` → 401)
