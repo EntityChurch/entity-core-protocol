@@ -1,6 +1,7 @@
 # Entity CBOR Encoding Specification
 
-**Version**: 1.5
+**Version**: 1.6
+**v1.6:** §5.4 — the fidelity contract gains the three-acts frame (relay · re-encode · transform) and item 5 goes SHOULD → MUST; §4.6 and §9.3's unknown-**format** preservation lines go SHOULD → MUST and name §5.4 as their authority. One rule, one strength, in the document that declares itself its canonical home.
 **Status**: Active
 
 This specification defines the encoding format for the Entity Core Protocol. All compliant implementations MUST follow this specification to ensure interoperability.
@@ -368,7 +369,7 @@ The format registry enables protocol evolution:
 **Rules for evolution:**
 - `ecfv1-sha256` (code 0x00) is REQUIRED for all peers
 - Additional formats are OPTIONAL
-- Unknown formats SHOULD be preserved when forwarding entities
+- Unknown formats MUST be preserved when forwarding entities — the same obligation as §5.4 item 5, on a different noun: a format code is what tells a consumer *how* to hash, and §4.5's digest width follows it, so a normalized or dropped code yields a reference that resolves to nothing. §5.4 is the canonical home of this contract; this line is the short form
 - Peers MAY index content under multiple formats for interoperability
 
 ### 4.7 Format Capability Advertisement
@@ -465,11 +466,13 @@ hash-bytes = bytes                            ; format-code + digest; LENGTH DET
 
 > **This section is the canonical home of the entity-fidelity contract**, and its conformance routes to Appendix E of this document. It is the receive/forward byte-preservation rule — one of the five load-bearing invariants — and an implementation or validator citing any older location should cite **`ENTITY-CBOR-ENCODING.md` §5.4**.
 
+> **Three acts, and this section binds two of them.** *Relaying* an entity (store the original, forward the original) and *re-encoding* one (lossless parse, canonical re-encode) are both claims that **this is still the sender's entity**, and both MUST preserve every byte of meaning — including content the implementation does not model. *Transforming* an entity — deliberately authoring a derived one — is neither: it produces a **new content hash**, the publisher **signs it as their own**, the original remains intact and independently addressable, and the only thing lost is deduplication against the original, which is a cost the transformer chose. **A transform is not a fidelity violation. Silently emitting a transform while claiming a relay is.**
+
 1. Validate hash on receipt (compute from {type, data}, compare)
 2. Trust validated hash thereafter — MUST NOT recompute
 3. Store original bytes
 4. Forward original — MUST NOT re-serialize
-5. SHOULD preserve unknown fields
+5. MUST preserve unknown fields. Content hashing covers the whole of `{type, data}`, so a stripped field is a **different entity**: a second content hash for one thing, costing deduplication at every downstream store and breaking the original author's signature against the forwarded bytes (`ENTITY-CORE-PROTOCOL.md` §2.10).
 
 **Property vs. mechanism (clarification).** The cross-impl-observable property is: *a forwarded entity re-presents the exact bytes that hash to its validated content hash, and all received content — known fields, unknown fields, CBOR tags, null-vs-absent — survives the round-trip.* Steps 3–4 (store original bytes, forward without re-serializing) are the **unconditionally robust** mechanism for guaranteeing it. An implementation MAY instead carry the validated hash (step 2) and re-encode canonically on forward **iff** (a) receipt validation is a strict ECF re-encode-and-compare — so an accepted entity's canonical encoding provably equals its received bytes — and (b) its parsed representation is lossless at every nesting level, so the re-encode reproduces unknown content. Under (a)+(b) the re-encode is byte-faithful and the property holds. What an implementation MUST NOT do is recompute the hash from a *lossy* parse without carrying the validated hash: that silently diverges the moment encoding is non-deterministic across impls/versions or an unmodeled (forward-compatibility) field appears — the exact hazard this contract exists to prevent. Carrying the validated hash (step 2) is required either way; raw-byte storage vs. lossless-parse-plus-canonical-re-encode is an implementation choice.
 
@@ -848,7 +851,7 @@ Hash computation MUST:
 **Format handling:**
 - Implementations MUST support `ecfv1-sha256` (code 0x00)
 - Implementations MAY support additional formats from the registry
-- Unknown format codes SHOULD be preserved when forwarding
+- Unknown format codes MUST be preserved when forwarding (§4.6; §5.4 is the canonical home of this contract)
 
 ### 9.4 Hash Storage
 

@@ -123,7 +123,12 @@ Value constraints are defined by the type extension (EXTENSION-TYPE.md). The typ
 
 Entities MAY contain fields not defined in the type. Unknown fields MUST be preserved. This enables forward compatibility with newer entity versions. Implementations MUST NOT reject entities solely because they contain unknown fields, unless operating in strict mode.
 
-**Null vs absent:** When a field-spec has `"optional": true`, the field SHOULD be absent from the entity (key not present in the map) rather than present with a null value. Absent and null produce different CBOR bytes and therefore different content hashes. Validators SHOULD treat null values on optional fields as equivalent to absent for validation purposes. See ENTITY-CORE-PROTOCOL.md §2.7 for the full rationale.
+**`ENTITY-CORE-PROTOCOL.md` §2.10 states the open-type rule and its rationale.**
+**`ENTITY-CBOR-ENCODING.md` §5.4 is the canonical home of the preservation contract itself.**
+
+**Null vs absent:** When a field-spec has `"optional": true`, the field SHOULD be absent from the entity (key not present in the map) rather than present with a null value. Absent and null produce different CBOR bytes and therefore different content hashes. Validators SHOULD treat null values on optional fields as equivalent to absent for validation purposes.
+
+See ENTITY-CORE-PROTOCOL.md §1.3 for the full rationale — including that a received null MUST be preserved on forward, which is the entity-fidelity contract applied to this distinction.
 
 ### 2.5 Content-Addressed Types
 
@@ -182,9 +187,11 @@ Plausible future candidates (illustrative only, not pre-judged): a query/predica
 
 A field-spec's `type_ref` (and the inner `type_ref` inside `array_of` / `map_of`) governs the **wire shape** of the value at that field. Two cases:
 
+**§8.1 is the authority for `core/entity`; the row below is a restatement of its shape, not a second definition of it.**
+
 | `type_ref` form | Wire shape | What's on the wire |
 |---|---|---|
-| `type_ref: "core/entity"` | **Entity envelope** — `{type, data, content_hash?}` | The type travels with the element; the slot holds a materialized, identity-bearing entity. |
+| `type_ref: "core/entity"` | **Entity envelope** — `{type, data, content_hash}` | The type travels with the element; the slot holds a materialized, identity-bearing entity. **All three keys are required.** |
 | `type_ref: <primitive>` (e.g., `primitive/string`, `primitive/uint`) | **Bare value** | The slot holds the primitive value directly (a string, an integer, a bytestring, etc.). |
 | `type_ref: <named type>` (e.g., `system/type/violation`, `app/user`) | **Bare value record** | The slot holds a flat record matching the named type's `fields` shape. The type is implicit from the field-spec — it does NOT appear as a `type` field on the value. |
 
@@ -855,7 +862,7 @@ Type evolution refers to changes to a type definition over time. Changes are cla
 - Remove a required field (old definition expects it)
 - Widen a constraint (type extension — new values may exceed old limits)
 
-Implementations SHOULD document which evolution rules they enforce. The open type model (ENTITY-CORE-PROTOCOL.md §2.7) provides natural forward compatibility for field additions — unknown fields are preserved, not rejected.
+Implementations SHOULD document which evolution rules they enforce. The open type model (ENTITY-CORE-PROTOCOL.md §2.10) provides natural forward compatibility for field additions — unknown fields are preserved, not rejected.
 
 ---
 
@@ -892,7 +899,7 @@ validate(entity, type_path):
 
   ; Unknown fields (open type behavior)
   ; Unknown fields in entity.data are preserved, not errors
-  ; See ENTITY-CORE-PROTOCOL.md §2.7
+  ; See ENTITY-CORE-PROTOCOL.md §2.10
 
   return collected_errors
 ```
@@ -1352,7 +1359,7 @@ Restrictions on further delegation of a capability.
 | `max_delegation_depth` | Maximum chain depth from this capability |
 | `max_delegation_ttl` | Maximum lifetime (ms) for delegated capabilities |
 
-Unknown fields in `delegation_caveats` follow open type semantics (ENTITY-CORE-PROTOCOL.md §2.7) — they are preserved, not rejected.
+Unknown fields in `delegation_caveats` follow open type semantics (ENTITY-CORE-PROTOCOL.md §2.10) — they are preserved, not rejected.
 
 ### 9.11 system/capability/token
 

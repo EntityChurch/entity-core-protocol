@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.2.8
+**Version**: 0.8.2.11
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md
@@ -516,7 +516,9 @@ Implementations MUST maintain fidelity throughout the system:
 2. **Trust validated hash**: After validation, use `content_hash` for all subsequent operations. MUST NOT recompute from internal structures.
 3. **Store original**: Store original entity content indexed by trusted hash.
 4. **Forward original**: When re-transmitting, use stored original. MUST NOT re-serialize.
-5. **Preserve unknown fields**: SHOULD preserve fields not understood. Enables forward compatibility and valid signatures through relay.
+5. **Preserve unknown fields**: MUST preserve fields not understood. Enables forward compatibility and valid signatures through relay. *(0.8.2.10 — this item read SHOULD while §2.10 below, and `ENTITY-NATIVE-TYPE-SYSTEM.md` §2.4, stated the same rule at MUST.)*
+
+**`ENTITY-CBOR-ENCODING.md` §5.4 is the canonical home of this contract; the list above is the short form.** That section carries the property-vs-mechanism distinction, the two conformant mechanisms with their preconditions, and the scoping that separates *relaying* and *re-encoding* an entity — both bound by this list — from *transforming* one into a derived entity of your own authorship, which produces a new content hash, correctly, and is not a fidelity violation.
 
 **Application — identity references.** A reference to another peer's identity (a cap `grantee`/`granter`, a `signature.signer`, any `system/hash` naming a `system/peer`) is the *authored* `content_hash` of that identity entity — the form its keyholder presents on the wire (carried as `signature.signer` during the handshake, §4.6). An implementation constructing such a reference MUST use that authored hash and MUST NOT recompute the identity entity's hash under its own `content_hash_format`. Under §4.5a item 1a the `system/peer` identity entity is authored at the **ECFv1-SHA-256 floor unconditionally**, so the authored form and the floor-derived form are **the same bytes on every connection** — not a per-connection coincidence to be preserved, but an identity. The prohibition is therefore not in tension with deriving an identity hash from a peer-id in order to build a `{peer_id_hex}` path segment (`SPECIFICATION-FORMAT` §8.4.6 (`entity-system-architecture`)): both routes yield one value. It remains the direct consequence of item 2 ("trust validated hash … MUST NOT recompute from internal structures"), and it still binds every *other* entity: re-deriving a received identity under the local format manufactures a second content_hash for one identity and breaks the §5.2 `grantee == author` / `signer == author` equality.
 
@@ -850,7 +852,7 @@ system/protocol/error := {
 
 Error codes are scoped per handler — connection errors (§4.7), tree errors (EXTENSION-TREE.md Appendix A), and domain handler errors each define their own `code` values. The `status` field on EXECUTE_RESPONSE provides the numeric category; `result.data.code` provides the specific error within that category.
 
-**Default-code force and the code slot (normative, 0.8.2.7).** Where a row above names a **default `code`**, that code is **mandatory for the generic case** at that status: when a response carries the status and no more-specific defined code applies, `result.data.code` MUST be the named default. The generic case is the one with no other information in it, so it is exactly the case a caller cannot branch on unless the spelling is fixed. A **more-specific code MAY** be used only where one is **defined for the operation in a spec code set** — §4.7 for connection errors, `EXTENSION-TREE.md` Appendix A for tree errors, or the owning domain handler's own error-code table. An **undefined spelling is non-conformant**: this is the *Authorization-path code discipline* paragraph below (*"MUST NOT surface a generic catch-all default … the catch-all is a sign that an authorization failure escaped its defined code"*) stated for every row rather than for the authorization path alone. The **unit of conformance is the code slot** — the set of `code` values an implementation emits at a given status — and **never a single spelling**: an implementation satisfies a row when every generic emit at that status carries the default, so retiring one synonym while a second remains in the same slot does not satisfy it.
+**Default-code force and the code slot (normative, 0.8.2.7).** Where a row above names a **default `code`**, that code is **mandatory for the generic case** at that status: when a response carries the status and no more-specific defined code applies, `result.data.code` MUST be the named default. The generic case is the one with no other information in it, so it is exactly the case a caller cannot branch on unless the spelling is fixed. A **more-specific code MAY** be used only where one is **defined for the operation in a spec code set** — §4.7 for connection errors, `EXTENSION-TREE.md` Appendix A for tree errors, or the owning domain handler's own error-code table. An **undefined spelling is non-conformant, and it falls back to that status's default (0.8.2.9)** — the absence of a table for an operation is **not** an unfilled slot: a peer that wanted a more-specific code and finds none defined emits the row's default, which is what a default is for. Where the condition genuinely names something a caller would branch on, the peer holds it as a **named divergence and routes it** for a table row rather than minting a site; it does not invent one. *(Stated because two implementations independently read the permission and the prohibition, found no statement of the consequence, and concluded the status had no governing set.)* This is the *Authorization-path code discipline* paragraph below (*"MUST NOT surface a generic catch-all default … the catch-all is a sign that an authorization failure escaped its defined code"*) stated for every row rather than for the authorization path alone. The **unit of conformance is the code slot** — the set of `code` values an implementation emits at a given status — and **never a single spelling**: an implementation satisfies a row when every generic emit at that status carries the default, so retiring one synonym while a second remains in the same slot does not satisfy it.
 
 **Satisfaction mode (normative, 0.8.2.7; per GUIDE-CONFORMANCE §5.2b.1).** The rows differ in what can drive them, and a check MUST NOT be pinned to a row it cannot reach:
 
@@ -3400,6 +3402,17 @@ When `entity` is present: stores the entity in the content store and binds the p
 
 When `entity` is absent or null: removes the binding at the path. The entity remains in the content store (garbage collection is implementation-defined).
 
+**`put` admission — structure, then hash (normative, 0.8.2.11).** `put` is a **receipt** path. The submitter authors the entity; the peer validates what it received (§1.8 item 1) and **MUST NOT** author a submitted entity's `content_hash` on the submitter's behalf. Admission has two ordered steps:
+
+1. **Structure.** `put-request.entity` is typed `core/entity` (§3.9; `ENTITY-NATIVE-TYPE-SYSTEM.md` §8.1), whose three fields are all required. The submitted value is an entity when it is a **map** carrying a **non-empty text-string `type`**, a **present `data`** (any CBOR value — `primitive/any` is unconstrained, so null is a legal payload), and a **`content_hash` that is a well-formed `system/hash`** whose total byte length matches its format code (§1.2). A value failing **any** of those clauses — not a map, `type` absent / empty / not a text string, `data` absent, or `content_hash` absent or mis-sized — **is not an entity**, and `put` MUST refuse it **400 `invalid_request`** (`EXTENSION-TREE.md` Appendix A). A `content_hash` that is well-formed but names a format code the peer does not support is the separate §1.2 ingest-dispatch case and is refused **400 `unsupported_content_hash_format`** (§4.7 row 5), not this row.
+2. **Hash.** The carried `content_hash` is compared against `content_hash({type, data})` (§1.2). A disagreement MUST be refused **400 `hash_mismatch`**.
+
+**Step 1 strictly precedes step 2, and the ordering is a data dependency rather than a choice**: step 2's inputs are exactly what step 1 establishes, so a submission that is **both** malformed and mis-hashed is step 1's and answers `invalid_request`. This is the same lowest-numbered-failing-step discipline §9.1 already pins for the §4.6 proof-of-possession ladder, and it is stated because the two 400 rows are individually satisfiable and jointly ambiguous — **no vector carrying a single fault can discriminate the order**, since each row's own input reaches its own branch either way.
+
+**Structural admission is not semantic validation.** `put` still does not validate `data` against the type named by `type`, and remains the unvalidated kernel primitive `EXTENSION-TREE.md` §2.2 describes. Step 1 asks *is this an entity*, never *is this a well-formed instance of its type*.
+
+**The authoring step exists, and it belongs to the SDK.** `SDK-OPERATIONS.md` §3.2 specifies `put(path, type, data) → hash`: the caller supplies an unhashed payload and the SDK **constructs** the `core/entity` — computing `content_hash` — before anything reaches the wire, which is the only way it can return that hash. An SDK that forwards `{type, data}` to `system/tree:put` has skipped its own construction step; it has not discovered a peer-side authoring arm, and a peer that accepts the two-key form is supplying an authorship the protocol assigns to the submitter.
+
 **Capability model**: The tree handler enforces two-level authorization (§5.4):
 
 1. **Dispatch scope**: The capability MUST contain a grant with `handlers` matching `system/tree`, `operations` including the requested operation, and `resources` covering the resource target scope. This is checked by `check_permission` (§5.2) before the handler runs.
@@ -4209,7 +4222,7 @@ A peer claims a **conformance profile** when it presents itself to a conformance
 - Wire framing (§1.6)
 - ECF encoding for content hashing (§1.2, §1.3)
 - Content hash validation on receipt (§1.8, §7.2)
-- Entity fidelity (§1.8)
+- Entity fidelity, including unknown-field and unknown-format-code preservation (§1.8, §2.10). **One row, one strength (0.8.2.10)** — this list previously carried the rule twice, at the two strengths those sections then disagreed on. The mechanism and its two conformant forms live in `ENTITY-CBOR-ENCODING.md` §5.4, gated by that document's Appendix E
 - Two wire message types: EXECUTE and EXECUTE_RESPONSE (§3.2, §3.3)
 - Request ID correlation
 - Envelope structure with per-entity hash validation (§3.1)
@@ -4237,7 +4250,7 @@ A peer claims a **conformance profile** when it presents itself to a conformance
 - `system/handler/interface` type recognition (§3.7)
 - Type index at `system/type/*` (§7.5)
 - Tree listing entry filtering against request capability (§6.3) — listing entries for paths the capability does not cover MUST be omitted
-- Unknown field preservation (§2.10)
+- **`system/tree:put` admission** (§6.3, §1.8 item 1) — the submitted `entity` is structurally admitted as a `core/entity` **before** its hash is checked: a non-map, an absent / empty / non-string `type`, an absent `data`, or an absent / mis-sized `content_hash` emits **400 `invalid_request`**; a well-formed entity whose carried hash disagrees with `content_hash({type, data})` emits **400 `hash_mismatch`**; the CAS-precondition loss is the distinct **409 `hash_mismatch`** (`EXTENSION-TREE.md` Appendix A). A peer MUST NOT compute a missing `content_hash` on the submitter's behalf — that is the SDK's construction step (`SDK-OPERATIONS.md` §3.2), not a peer-side authoring arm. Drivable over the wire; the discriminating input for the ordering carries **both** faults at once (0.8.2.11)
 - Validate total hash byte length matches format code (§1.2)
 - Path validation (§1.4) — no null bytes, no leading slash, no empty segments
 - Dispatch routing (§1.4) — reject an inbound EXECUTE targeting a non-self peer_id with **400 `invalid_request`** (0.8.2.2 names the code; the status was already pinned). The refusal runs at canonicalization, **before** handler resolution and before `check_permission` (§6.5 step 3), so it is pre-authorization: it MUST NOT be reported as `404 handler_not_found` (§6.2) or `403 capability_denied`, and MUST NOT be reached by resolving a local handler for the foreign path and letting §5.2 decide. Enumerated in the §5.2a pre-dispatch row; driven by `dispatch_inbound_foreign_namespace_refused`
