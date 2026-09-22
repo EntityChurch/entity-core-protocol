@@ -13,6 +13,51 @@ is corrected in place and the correction is recorded here.
 
 ---
 
+## 2026-09-16 — ⛔ `signature.1`–`signature.3` are KNOWN-DIVERGENT and the correction is OWED, not landed
+
+**The artifact has NOT moved. `conformance-vectors.cbor` is still
+`9695b1f1d939cfdfdd4297f8ad32122d424b1ec180cfae74c92d509d88f7c6dc`, and this entry exists so that
+nobody reads that digest as still-blessed on the `signature` category.**
+
+`ENTITY-CORE-PROTOCOL` **0.8.2.26** ruled what a signature signs: **the target entity's full
+`content_hash`** — `varint(format_code) ‖ SHA256(ECF({type, data}))`, 33 bytes under ECFv1-SHA-256 —
+and §7.3 is its single normative home. `ENTITY-CBOR-ENCODING` Appendix E's `signature` category was
+corrected in the same revision.
+
+**The three landed vectors sign `ECF({type, data})` instead** — the message one SHA-256 and one prefix
+short of the ruled one. They were generated to match the category's prose, which was wrong.
+
+⭐ **The artifact contains its own correct input, one category above.** `content_hash.1`'s `canonical`
+is `h'005f3139…'` — the 33-byte value §7.3 names as the message — and the `signature` category three
+rows down does not use it. Nothing in the fixture related the two categories, which is why a
+construction defect sat inside one artifact unreadable from either side.
+
+**How it surfaced:** `entity-system-conformance` executed the category — the first time any Class-B
+category had been executed rather than read — and reproduced `signature.1–3` over the ECF bytes with a
+decoder and an RFC 8032 Ed25519 of their own writing, while the §7.3 reading completes the live
+handshake on 8 of 8 peers and `entity-core-go` refuses the fixture's reading `401
+authentication_failed`. Two independent codecs, both directions.
+
+### What is owed, and by whom
+
+| # | item | owner |
+|---|---|---|
+| 1 | Recompute `signature.1`, `.2`, `.3` — **`input` maps unchanged**, only `canonical` moves | a seat that runs code; `entity-core-go` as core lead |
+| 2 | Add **`signature.4`**, signing an entity that also appears in the `content_hash` category, so the two cross-check by inspection (Appendix E now requires this) | same |
+| 3 | Update the `.diag` header comment for the category — it states the old construction informally | same, in the same commit as 1–2 |
+| 4 | **Cross-bless with a second independent codec** before the digest is published | `entity-system-conformance` s1-py is the natural second: independent decoder, Ed25519 from the RFC, and it is the instrument that found this |
+| 5 | Record the correction here with the new sha256 | whoever lands 1–3 |
+| 6 | Re-pin every published conformance report citing the superseded digest | each seat |
+
+**Arch rules the text and does not author the signatures** (`GUIDE-EXTENSION-DEVELOPMENT` §7 Stage 4).
+Owning this repo changes who edits it, never how.
+
+⚠ **Until item 5 lands, a conformance report citing this corpus SHOULD state that the `signature`
+category is under correction.** The other 68 vectors are unaffected — the defect is in the Class-B
+`sign` construction and reaches nothing else.
+
+---
+
 ## 2026-08-31 — de-versioned
 
 **No vector value changed and the normative artifact did not move.**

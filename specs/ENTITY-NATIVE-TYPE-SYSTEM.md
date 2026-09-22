@@ -1492,12 +1492,12 @@ Proves authorship or approval of an entity. Signatures point TO the content they
 
 | Field | Description |
 |-------|-------------|
-| `target` | Content hash of the signed entity |
+| `target` | Content hash of the signed entity — the full `system/hash` value, format code ‖ digest. **These are the signed bytes** (ENTITY-CORE-PROTOCOL.md §7.3). |
 | `signer` | Hash of signer's identity entity |
 | `algorithm` | Signature algorithm (e.g., `"ed25519"`). See ENTITY-CORE-PROTOCOL.md §3.5 for signature model. |
 | `signature` | Raw signature bytes |
 
-The signature is computed over the target entity's content hash digest bytes. See ENTITY-CORE-PROTOCOL.md §7.3.
+The signature is computed over the target entity's **full `content_hash`** — format code ‖ digest, the same bytes the `target` field carries. **ENTITY-CORE-PROTOCOL.md §7.3 is the normative home and this sentence is a pointer, not a second statement of the rule**; where they differ, §7.3 governs. *(0.8.2.26 — this read "the target entity's content hash **digest** bytes", which is the hash without its format code, while citing §7.3, which specifies the hash with it. An unmarked restatement drifted by one field from the authority named in its own sentence, and because the divergence was a prefix rather than a different value it read as agreement to every reviewer who did not count bytes.)*
 
 ### 10.3 system/handler
 
