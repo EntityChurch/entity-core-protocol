@@ -1,6 +1,6 @@
 # Entity CBOR Encoding Specification
 
-**Version**: 1.6
+**Version**: 1.7
 **v1.6:** §5.4 — the fidelity contract gains the three-acts frame (relay · re-encode · transform) and item 5 goes SHOULD → MUST; §4.6 and §9.3's unknown-**format** preservation lines go SHOULD → MUST and name §5.4 as their authority. One rule, one strength, in the document that declares itself its canonical home.
 **Status**: Active
 
@@ -468,7 +468,7 @@ hash-bytes = bytes                            ; format-code + digest; LENGTH DET
 
 > **Three acts, and this section binds two of them.** *Relaying* an entity (store the original, forward the original) and *re-encoding* one (lossless parse, canonical re-encode) are both claims that **this is still the sender's entity**, and both MUST preserve every byte of meaning — including content the implementation does not model. *Transforming* an entity — deliberately authoring a derived one — is neither: it produces a **new content hash**, the publisher **signs it as their own**, the original remains intact and independently addressable, and the only thing lost is deduplication against the original, which is a cost the transformer chose. **A transform is not a fidelity violation. Silently emitting a transform while claiming a relay is.**
 
-1. Validate hash on receipt (compute from {type, data}, compare)
+1. Validate hash on receipt (compute from {type, data}, compare) — **self-consistency, and only half of the obligation**: an entity that hashes to its own content is still wrong under an address that is not its hash. **Resolution integrity `[MUST]` (`ENTITY-CORE-PROTOCOL.md` §1.8, 0.8.2.23): never resolve an entity used for an authority decision through an address not verified against its content.** Satisfied by binding each `included` map key to the entity under it, **or** by discarding wire keys at the decode boundary and addressing by a `content_hash` validated under this item — the latter **only** where this item runs at every ingress.
 2. Trust validated hash thereafter — MUST NOT recompute
 3. Store original bytes
 4. Forward original — MUST NOT re-serialize

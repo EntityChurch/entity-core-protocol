@@ -7,6 +7,74 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Fixed — a capability/identity forgery in the envelope `included` map (0.8.2.23)
+
+**Every authority lookup resolved an entity by a wire-supplied address that nothing verified.**
+`envelope.included` is keyed by hash, and §5.2/§5.5/§5.5a resolve the author, the capability, the
+chain root granter, each link's signer and each grantee **by key** out of it. An attacker who knows a
+victim's identity hash — the **public `grantee` field of any capability the victim presents** — could
+file their own `system/peer` entity under that key; their own signature then verified against their
+own key while the peer attributed it to the victim. An observer of any capability chain could mint a
+leaf off it, up to the parent's scope, without the grantee's key.
+
+Self-consistency validation does not catch it, which is why it survived review: the substitute entity
+hashes to its own content and is perfectly valid — it is wrong only *under the key it was filed at* —
+and `content_hash` rides the wire, so the entity's own claim is attacker-controlled too.
+
+**The obligation is stated as a property, not a mechanism.** §1.8 item 1 now carries *resolution
+integrity* — never resolve an entity used for an authority decision through an address not verified
+against its content — satisfied by **binding the key** or by **discarding the key and addressing by a
+validated `content_hash`**. Both are conformant; the second is safe only where receipt validation runs
+at every ingress, and that precondition is stated with it. §3.1 makes the map's keying normative in
+both directions; it had stated the shape in the indicative for seven revisions and obliged nothing.
+
+**Dispositions follow the resolution site, not the check** — three new §5.2a rows: author → `401
+authentication_failed`, capability and chain granter/signer → `403 capability_denied`, grantee → the
+existing `401 unresolvable_grantee` carve-out, and a decode-boundary refusal → `400 hash_mismatch`
+without reaching the table. A uniform verdict would have made a key-discarding implementation
+non-conformant for answering the row §5.2a already assigns it.
+
+### Added — the handler frame is the handler that owns the operation (0.8.2.23)
+
+§6.3's `handler_pattern` selects which grants are considered **before** their `resources` scope is
+read, and the specification never said who supplies it. It is now `[MUST]`: **the handler that owns
+the operation being authorized, never the handler performing the check** — generalizing a rule
+`EXTENSION-SUBSCRIPTION` §2.3 already states in the imperative for a non-tree handler. Where owner and
+runner coincide the frame is that handler's own pattern, so `system/tree` is not the only legal value.
+`handler_pattern` is also **REQUIRED and fail-closed**: an absent value MUST NOT be read as *match all
+handlers*. Both directions had been measured in shipped implementations — the wrong frame refuses a
+conformant caller with no dimension to attribute the refusal to; the absent frame let a grant scoped to
+any handler authorize a tree read.
+
+### Fixed — the authority table flattened an intersection, and a sentinel arm was unreachable (0.8.2.22)
+
+- **§6.8** — the handler-level authority is selected by **whether the access serves a live caller's
+  request**, not by who derived the path. A path the handler derived is still the caller's access when
+  its existence, content or effect reaches the caller: a listing entry, an extract or snapshot binding,
+  a merge expansion, a subscription payload. For those, **the caller's capability and the handler's own
+  grant MUST both pass**. The previous three-row exclusive table could not express an intersection, so
+  it made a handler grant — broad by construction — the authority for listing entries, which makes the
+  listing filter vacuous, and for merge expansions, which let a narrow caller merge anywhere the tree
+  handler can reach.
+- **§6.3** — the listing filter binds **any handler returning a multi-entry result whose entries are
+  tree paths**, not only the tree handler; the rule was already general and the sentence was not.
+  `filter_listing`'s parameter is renamed `authority`, matching the function it calls.
+- **§5.2** — `check_resource_scope`'s pattern arm takes the unmatchable-exclude sentinel **first**. The
+  arm's coverage test was correct in isolation and unreachable: `patterns_overlap` `continue`s on a
+  sentinel, skipping it. §5.4's consumer table gains the site and states that a sentinel arm is a
+  **control-flow obligation**, not a line.
+- **§6.3** — a **pattern subject** routed into `check_path_permission` is authorized as §5.2 authorizes
+  a pattern target, with an empty caller-exclude set: every overlapping grant exclude is uncovered, so
+  the check MUST DENY.
+- **§5.2 / §5.6** — the scope type is a property of the **dimension**, supplied by the call site, never
+  read from a received entity; a `scope` whose declared `type` contradicts its dimension is refused
+  `403 capability_denied`. `matches_scope` and `scope_subset` take it as a parameter, which is the
+  signature every conformant implementation already has — this corrects the specification toward the
+  implementations rather than the reverse.
+
+> Both revisions landed in one editing pass and no peer observed an intermediate `0.8.2.22` document.
+> Each delta carries its own revision marker inline so either number resolves to the rules it named.
+
 ### Added — outbound sub-dispatch authorization, and the authority it runs against (0.8.2.17)
 
 **PD-2 lands.** `check_permission` now MUST run **before a locally-originated sub-dispatch leaves the

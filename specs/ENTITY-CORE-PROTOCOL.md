@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.2.19
+**Version**: 0.8.2.23
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md
@@ -284,8 +284,11 @@ Normalization strips the `entity://` scheme and prepends `/` to produce an absol
 ```
 dispatch_path(uri, local_peer_id):
   normalized = normalize(uri)                          ; strip entity:// scheme → absolute path
-  canonical = canonicalize(normalized, local_peer_id)  ; resolve peer-relative to absolute
-  validate_absolute_path(canonical)                    ; MUST — reject malformed peer_id segment
+  canonical = canonicalize(normalized, local_peer_id)  ; total — may yield NEVER_MATCH (§5.4)
+  ; MUST consume the verdict (0.8.2.20). Calling the validator for effect and
+  ; discarding its return enforces nothing; NEVER_MATCH fails here by construction.
+  if validate_absolute_path(canonical) is error:
+    return error(400, "invalid_path")
   return canonical
 ```
 
@@ -541,7 +544,7 @@ Remote data is structurally identical to local data — same entity types, same 
 
 Implementations MUST maintain fidelity throughout the system:
 
-1. **Validate on receipt**: Compute expected hash from `{type, data}`, compare with `content_hash`, reject on mismatch.
+1. **Validate on receipt**: Compute expected hash from `{type, data}`, compare with `content_hash`, reject on mismatch. **This is self-consistency, and it is only half of the obligation `[MUST]` (0.8.2.23).** An entity that hashes to its own content is still wrong under an address that is not its hash — so: **resolution integrity — an implementation MUST NOT resolve an entity used for any authority decision through an address it has not verified against that entity's content.** Two mechanisms satisfy this and an implementation MUST implement at least one: **(a) bind the key** — on accepting a received `included` map, reject any entry whose key is not `content_hash({type, data})` of the entity under it *(RECOMMENDED for new implementations: it fails the envelope closed at one site)*; or **(b) discard the key** — drop wire-supplied keys at the decode boundary and address entities exclusively by a `content_hash` validated under this item. ⚠ **Mechanism (b) depends on this item running at EVERY ingress and MUST NOT be adopted without it**: addressing by `content_hash` is safe only because that field has itself been validated, and a peer that skips the validation pass has re-created the defect one level down, with the address an unvalidated wire field again. **Retaining a wire-supplied key as an address without binding it is non-conformant.** The map's keying is stated as a property of the envelope in §3.1; this item is the obligation on the receiver. Dispositions are enumerated in §5.2a.
 2. **Trust validated hash**: After validation, use `content_hash` for all subsequent operations. MUST NOT recompute from internal structures.
 3. **Store original**: Store original entity content indexed by trusted hash.
 4. **Forward original**: When re-transmitting, use stored original. MUST NOT re-serialize.
@@ -757,7 +760,7 @@ The envelope is an entity — it has a type, structured data, and can be content
 
 `root`: The primary entity. Determines behavior — if root type is `system/protocol/execute`, peer processes as request.
 
-`included`: Map of supporting entities keyed by their content hash (`system/hash` byte strings). Contains capabilities, identities, signatures, delegation chains, and any other entities referenced by the root entity's data fields. Map keys are CBOR byte strings (bstr), not text strings.
+`included`: Map of supporting entities keyed by their content hash (`system/hash` byte strings). Contains capabilities, identities, signatures, delegation chains, and any other entities referenced by the root entity's data fields. Map keys are CBOR byte strings (bstr), not text strings. **The keying is normative in both directions `[MUST]` (0.8.2.23).** A sender MUST key each entry by the content hash of the entity it holds. A receiver MUST NOT resolve authority through a key it has not verified against the entity under it — see §1.8's resolution-integrity obligation for the two conformant mechanisms, and §5.2a for the dispositions. *(This sentence stated the map's shape in the indicative for seven revisions and obliged nothing, as did its restatements in `ENTITY-CBOR-ENCODING` §5, `ENTITY-NATIVE-TYPE-SYSTEM` §1057, `EXTENSION-QUERY` §5.5 and `EXTENSION-REVISION` §4.3. Readers building a **decoder** from the schema took it as a constraint and enforced it; readers building a **verifier** from §5.2 took it as a description of how senders build the map — which is what it said — and every authority lookup in §5.2/§5.5/§5.5a then resolved through an unverified address. The same condition and code have been enforced on the content-ingest path, where the consequence is a corrupted store, since `EXTENSION-CONTENT` §6.3 was written.)*
 
 Entities in the `included` map carry `content_hash` per §1.1. The content_hash MUST match the map key. This redundancy is intentional — entities are self-describing and must survive serialization roundtrips through code that does not preserve map key context (delivery chains, continuation transforms, generic CBOR processing).
 
@@ -858,7 +861,7 @@ Status codes:
 |------|---------|
 | 200 | Success |
 | 207 | Partial success — binding committed but cascade halted. See SYSTEM-COMPOSITION.md §2.7A for the `system/tree/partial-result` response envelope. |
-| 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`, `path_required`. **`path_required`** is raised when an operation **whose own specification requires a `resource`** is invoked without one. It is **declared here, and raised by the handler** — it is core's code because the *condition* is core's (`resource` is a §3.2 EXECUTE field, not any handler's invention), and it is available to every handler for that reason; it is **not** a synonym for `invalid_request`, because the remedy differs — *supply a resource* is a different instruction from *fix your request*, and the code is what selects it (0.8.2.14). ***Which* operations require one is stated by each operation's own specification** — `EXTENSION-CONTENT` §6.2/§6.3 are the worked examples — and an operation that **targets no entity binding** carries no requirement: `system/quorum:verify` takes both operands in `params` and binds nothing, so a `resource` would have nothing to name. *(The test is whether the operation targets a binding, not whether it is configuration-shaped: an operation that writes or reads at a path derived from `EXECUTE.resource.targets[0]` requires a resource however administrative it looks.)* **An operation that requires a resource answers ABSENT with `path_required` and MORE THAN ONE with `ambiguous_resource` (0.8.2.18)** — the two are different inputs with different remedies, and this row's whole reason for existing is that the code selects the remedy. **A handler specification that collapses them into one code is non-conformant on the absent case**; stating the general form here means the next one does not re-derive it. *(0.8.2.17 — a dispatch-level reading of this row is **withdrawn**. It required the dispatcher to identify which operations need a `resource`, and `system/handler/operation-spec` declares only `input_type` and `output_type` — so a dispatcher, which resolves the manifest and nothing else, has no field to read. §3.2 states the complementary rule: an absent `resource` means no resource check at dispatch, and the handler may check internally. A manifest field declaring the requirement is a coherent design and is a separate, wire-visible proposal.)* `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
+| 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`, `path_required`, `ambiguous_resource`, `malformed_resource`. *(0.8.2.20 — `ambiguous_resource` and `malformed_resource` are added to this enumeration. Both name conditions on `resource`, a §3.2 EXECUTE field, so both are core's by this row's own test; `ambiguous_resource` was MUSTed in this row's own prose while absent from its list, and `malformed_resource` was raised by an extension — `EXTENSION-ROLE` §4.3 — and tabulated in `GUIDE-ROLE` while declared nowhere in core.)* **`malformed_resource`** means *a resource target is present and is not a usable path for this operation* — a pattern where a concrete path is required, or a string that is not a path at all. It is distinct from `invalid_path` (structurally invalid anywhere) and from `path_required` (there is no target). **`path_required`** is raised when an operation **whose own specification requires a `resource`** is invoked without one. It is **declared here, and raised by the handler** — it is core's code because the *condition* is core's (`resource` is a §3.2 EXECUTE field, not any handler's invention), and it is available to every handler for that reason; it is **not** a synonym for `invalid_request`, because the remedy differs — *supply a resource* is a different instruction from *fix your request*, and the code is what selects it (0.8.2.14). ***Which* operations require one is stated by each operation's own specification** — `EXTENSION-CONTENT` §6.2/§6.3 are the worked examples — and an operation that **targets no entity binding** carries no requirement: `system/quorum:verify` takes both operands in `params` and binds nothing, so a `resource` would have nothing to name. *(The test is whether the operation targets a binding, not whether it is configuration-shaped: an operation that writes or reads at a path derived from `EXECUTE.resource.targets[0]` requires a resource however administrative it looks.)* **An operation that requires a resource resolves it through `effective_targets` (§5.2) and answers from THAT list, never from `resource.targets` `[MUST]` (0.8.2.20):** an **empty** effective list with **`path_required`**, **more than one** entry with **`ambiguous_resource`**, and **exactly one** entry by proceeding **on that entry**. The two error inputs are different remedies and the code selects which; **a handler specification that collapses them into one code is non-conformant on the absent case**, and answering `ambiguous_resource` for an absent resource inverts them. **An empty effective list IS the absent case** — a request naming one target and excluding it asks for nothing. **And the selection is the load-bearing half: a handler that counts the effective list and then indexes `resource.targets[0]` has implemented this row's arithmetic completely and is still reading a path no authorization covered** (§5.2's subject rule; 0.8.2.20 supersedes 0.8.2.18's count-only form, which `F71` refuted with one request). **A resource-requiring operation takes a CONCRETE path:** where the effective list holds a single entry and that entry `is_pattern`, the operation answers **`400 malformed_resource`**. Pattern targets remain valid for operations whose specification defines a set-valued subject; this clause binds only operations that require **a** resource. *(0.8.2.17 — a dispatch-level reading of this row is **withdrawn**. It required the dispatcher to identify which operations need a `resource`, and `system/handler/operation-spec` declares only `input_type` and `output_type` — so a dispatcher, which resolves the manifest and nothing else, has no field to read. §3.2 states the complementary rule: an absent `resource` means no resource check at dispatch, and the handler may check internally. A manifest field declaring the requirement is a coherent design and is a separate, wire-visible proposal.)* `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
 | 401 | Authentication failed (also: `capability_revoked` per `EXTENSION-ROLE.md` §5.5; `unresolvable_grantee` per §5.5 of this doc — cap's `grantee` does not resolve to a present `system/peer` entity) |
 | 403 | Forbidden — request-time authorization DENY (§5.2). Default `code` = `capability_denied`; more-specific authorization codes: `scope_exceeds_authority` (capability handler request subset-validation, §6.2). See §5.2 verdict-to-status mapping. |
 | 404 | Not found. Default `code` = **`handler_not_found`** — no handler is registered at the resolved path (§6.5), **on a path that targets the local peer**. §6.2 is the defining home for this code and this row is its restatement. Distinct from 501, where a handler IS registered and the named operation is not implemented; distinct also from a 404 raised **inside** a registered handler because the requested entity, binding or hash is absent — that is a domain outcome carrying the domain's own code, not this row (0.8.2.7). A path targeting a foreign namespace is neither: it is refused at canonicalization with `400 invalid_request` (§1.4, §5.2a, §6.5 step 3). |
@@ -1077,7 +1080,7 @@ system/capability/token := {
 
 **M3 — validity constraint (normative).** A capability whose `granter` is a multi-granter MUST have `parent: null` — multi-sig caps are root-only. (Polymorphic `granter` without polymorphic `grantee` means a non-root multi-sig cap cannot satisfy chain linkage `hash_equals(parent.grantee, child.granter)`; mid-chain multi-sig is deferred.) A multi-granter MUST satisfy: `len(signers) ≥ 2` (use single-sig for N=1), no duplicate `signers` entries, and `threshold` ∈ [2, len(signers)] (K=0/K=1/K>N invalid). These are checked **at chain-walk entry in `verify_capability_chain` for every entity in the chain (MUST)**, SHOULD before adding a cap to the content store, and MAY at envelope decode. **Error-code normalization:** regardless of which pipeline layer detects an M3 violation, when the rejected entity is a `system/capability/token` the caller MUST be surfaced `403 capability_denied` (not `400 bad_request`) — the response shaper translates a structural-decode rejection to a capability rejection keyed on the failed entity's `type`. **Precedence:** M3 structural validity is checked *before* signature verification on the same cap, so M3 violations surface as `403 capability_denied` rather than `401`.
 
-**Scope types.** Two scope types provide typed structure for grant dimensions. `system/capability/path-scope` is for dimensions whose values are tree paths (handlers, resources) — its `include` and `exclude` arrays hold `system/tree/path` values. `system/capability/id-scope` is for dimensions whose values are identifiers (operations, peers) — its arrays hold `primitive/string` values. Both have the same `{include, exclude}` structure. The `matches_scope` algorithm (§5.2) accesses these fields structurally but matches each dimension **by its scope type** (0.8.1, F40): `path-scope` values (handlers, resources) are canonicalized to absolute paths (§1.4) before comparison; `id-scope` values (operations, peers) are compared as literal identifiers. The two MUST NOT be interchanged — a path dimension matched literally, or an id dimension canonicalized, is a conformance defect (it produced a real ALLOW bug; two impls guessing the typing diverge on ALLOW across a peer boundary).
+**Scope types.** Two scope types provide typed structure for grant dimensions. `system/capability/path-scope` is for dimensions whose values are tree paths (handlers, resources) — its `include` and `exclude` arrays hold `system/tree/path` values. `system/capability/id-scope` is for dimensions whose values are identifiers (operations, peers) — its arrays hold `primitive/string` values. Both have the same `{include, exclude}` structure. The `matches_scope` algorithm (§5.2) accesses these fields structurally but matches each dimension **by its scope type** (0.8.1, F40): `path-scope` values (handlers, resources) are canonicalized to absolute paths (§1.4) before comparison; `id-scope` values (operations, peers) are compared as literal identifiers. The two MUST NOT be interchanged — a path dimension matched literally, or an id dimension canonicalized, is a conformance defect (it produced a real ALLOW bug; two impls guessing the typing diverge on ALLOW across a peer boundary). **The scope type is a property of the DIMENSION and is supplied by the call site `[MUST]` (0.8.2.22).** `handlers` and `resources` are `path-scope`; `operations` and `peers` are `id-scope`; this specification fixes that mapping and a grant does not get to restate it. An implementation MUST NOT take the dispatch type from a received entity's `scope.type` field. **A received `scope` whose declared `type` contradicts its dimension is a malformed token and MUST be refused `403 capability_denied` `[MUST]`**, per the same error-code normalization M3 applies to a rejected `system/capability`. *(0.8.2.22 — `matches_scope` read `scope.type` off the received entity under a comment arguing for it, and `scope_subset` compared two wire values to each other, which establishes only that a malformed pair agrees. Nothing validated either against the dimension: §3.6 declares a type, `put` explicitly does not validate `data` against `type`, M3 is multi-granter shape only, and a root cap never reaches `scope_subset` at all. A mistyped `operations` dimension therefore reached the canonicalizing matcher, which over-grants on `include` and inverts the intent on `exclude`. The corrected text is the one a correct implementation already executes: the type is known at every call site by construction.)*
 
 **id-scope pattern grammar (normative — 0.8.1, F40).** An id-scope pattern (`operations`, `peers`) matches the **raw value as a literal string** with exactly two wildcard forms: **bare `*`** matches any value, and a **trailing `/*`** matches by literal segment-prefix (`compute/*` matches `compute/apply` — meaningful for `/`-namespaced operation names; peer-ids are flat, so peer patterns use a literal id or `*`). id-scope **MUST NOT** apply the §5.4 path transforms: **no** leading-`/` universal-scope reading, **no** `/*/` interior peer-wildcard, **no** peer-relative→`/{local_peer_id}/…` qualification. A pattern carrying that path syntax (`/*/get`, `/{peer}/op`, `/*/*`) is therefore matched **only as a literal string** and does not match a bare identifier value. This is deliberately **not** the §5.4 `matches_pattern` used for `path-scope` — that function canonicalizes, and applying it to `id-scope` is the F40 defect. *(Consequence: the conformant reading is literal; a peer that canonicalizes `id-scope` over-grants on `include` path-form patterns and inverts the intent on `exclude` — the A-SQL-008 ALLOW-bug class. An implementation on the canonicalizing reading is non-conformant and MUST adopt the literal matcher.)*
 
@@ -2133,6 +2136,15 @@ verify_request(envelope, local_peer_id, verify_ctx):
   execute = envelope.root
   included = envelope.included
 
+  ; PRECONDITION -- RESOLUTION INTEGRITY (0.8.2.23). Every lookup below
+  ; addresses `included` BY HASH: the author, the capability, and through
+  ; verify_capability_chain the root granter, each link's signer and each
+  ; grantee. NO lookup may resolve through an address that has not been
+  ; verified against the content it addresses (§1.8). This carries NO verdict
+  ; of its own -- each failure takes the §5.2a row of the resolution it
+  ; corrupts -- because the two conformant mechanisms detect it at different
+  ; points and a single verdict would outlaw one of them.
+
   ; 1. Validate content hash
   ; A tampered content hash is a structural envelope corruption — surfaces as
   ; AUTHZ_DENY (matching existing oracle/impl behavior); not strictly an
@@ -2198,27 +2210,46 @@ find_signature_by_signer(target_hash, signer_id, included):
         return entity
   return null
 
-matches_scope(value, scope, local_peer_id):
+matches_scope(value, scope, dimension_type, local_peer_id):
   ; Scope check for a grant dimension. Returns true if `value` is included
   ; and not excluded by `scope`.
   ;
-  ; DISPATCHES ON THE SCOPE'S TYPE (0.8.1 F40; pseudocode corrected 0.8.2.16).
-  ; This is NOT a uniform check across dimensions: a path dimension matched
-  ; literally, or an id dimension canonicalized, is a conformance defect
-  ; (§5.2 "Scope types"). The scope entity carries its own type, so no call
-  ; site needs to supply it.
+  ; DISPATCHES ON THE DIMENSION'S TYPE (0.8.1 F40; pseudocode corrected
+  ; 0.8.2.16; SOURCE of the type corrected 0.8.2.22). This is NOT a uniform
+  ; check across dimensions: a path dimension matched literally, or an id
+  ; dimension canonicalized, is a conformance defect (§5.2 "Scope types").
+  ;
+  ; `dimension_type` is supplied BY THE CALL SITE, which knows which dimension
+  ; it is checking. It is NOT read from `scope.type` off the received entity.
+  ; The type is a property of the DIMENSION -- `handlers`/`resources` are
+  ; path-scope, `operations`/`peers` are id-scope -- and that is fixed by this
+  ; specification, not by the grant. A received `scope.type` contradicting its
+  ; dimension is a malformed token, refused per the rule below; consulting it
+  ; would let a mistyped `operations` dimension reach the canonicalizing
+  ; matcher, which over-grants on `include` and inverts the intent on
+  ; `exclude`. Every conformant implementation already passes it in.
   ;
   ;   system/capability/path-scope  (handlers, resources) -> canonicalize
   ;   system/capability/id-scope    (operations, peers)   -> literal match
   matched = false
   for pattern in scope.include:
-    if scope_value_matches(value, pattern, scope.type, local_peer_id):
+    if scope_value_matches(value, pattern, dimension_type, local_peer_id):
       matched = true
       break
   if not matched: return false
   if scope.exclude is not null:
     for pattern in scope.exclude:
-      if scope_value_matches(value, pattern, scope.type, local_peer_id):
+      ; AN UNMATCHABLE EXCLUDE EXCLUDES EVERYTHING (0.8.2.21). The sentinel's
+      ; "matches nothing" is fail-CLOSED in an include (covers nothing → the
+      ; grant grants nothing) and fail-OPEN here (carves out nothing → the
+      ; grant is SILENTLY WIDER than its author wrote). Same value, same
+      ; matcher, opposite safety direction — so the reading is chosen HERE,
+      ; where the position is known, and matches_pattern stays uniform over
+      ; its operands. A capability carrying such a pattern is invalid (§5.4)
+      ; and should never reach this loop; this arm is why that is a net and
+      ; not the only gate.
+      if canonicalize(pattern, local_peer_id) == NEVER_MATCH: return false
+      if scope_value_matches(value, pattern, dimension_type, local_peer_id):
         return false
   return true
 
@@ -2288,12 +2319,12 @@ check_permission(execute, capability, handler_pattern, local_peer_id):
   resource_target = execute.data.resource                          ; may be null
 
   for grant in capability.data.grants:
-    if not matches_scope(operation, grant.operations, local_peer_id):
+    if not matches_scope(operation, grant.operations, "system/capability/id-scope", local_peer_id):
       continue
-    if not matches_scope(handler_pattern, grant.handlers, local_peer_id):
+    if not matches_scope(handler_pattern, grant.handlers, "system/capability/path-scope", local_peer_id):
       continue
     peers_scope = grant.peers or {include: [local_peer_id]}
-    if not matches_scope(target_peer, peers_scope, local_peer_id):
+    if not matches_scope(target_peer, peers_scope, "system/capability/id-scope", local_peer_id):
       continue
     ; Resource check — only when resource is present
     if resource_target is not null:
@@ -2322,12 +2353,12 @@ check_grant_covers(handler_path, operation, resource_target, capability, local_p
   handler_pattern = handler_path
 
   for grant in capability.data.grants:
-    if not matches_scope(operation, grant.operations, local_peer_id):
+    if not matches_scope(operation, grant.operations, "system/capability/id-scope", local_peer_id):
       continue
-    if not matches_scope(handler_pattern, grant.handlers, local_peer_id):
+    if not matches_scope(handler_pattern, grant.handlers, "system/capability/path-scope", local_peer_id):
       continue
     peers_scope = grant.peers or {include: [local_peer_id]}
-    if not matches_scope(target_peer, peers_scope, local_peer_id):
+    if not matches_scope(target_peer, peers_scope, "system/capability/id-scope", local_peer_id):
       continue
     if resource_target is not null:
       if not check_resource_scope(resource_target, grant.resources, local_peer_id):
@@ -2335,10 +2366,62 @@ check_grant_covers(handler_path, operation, resource_target, capability, local_p
     return ALLOW
   return DENY
 
+effective_targets(resource_target, local_peer_id):
+  ; THE TARGETS A REQUEST ACTUALLY NAMES, after the caller's own exclusions.
+  ; THE AUTHORIZER AND THE HANDLER MUST BOTH DERIVE THEIR SUBJECT FROM THIS ONE
+  ; FUNCTION (0.8.2.20).
+  ;
+  ; It is a named function rather than a rule in prose because the defect it
+  ; closes is two layers computing the same set independently and drifting
+  ; (F68): check_resource_scope skipped caller-excluded targets while every
+  ; handler in the corpus indexed resource.targets[0], and WHICH targets
+  ; differed was the caller's to choose. A third statement of the rule would
+  ; drift the same way; a function has one definition.
+  ;
+  ; Its parameters are deliberately only values a handler already holds
+  ; (ctx.resource, ctx.local_peer_id) — no grant, no capability, no dispatch
+  ; state — so that a handler specified in another document can call it.
+
+  ; An absent resource yields the empty list, so a handler needs no separate
+  ; null check: "absent" and "present but fully self-excluded" are the same
+  ; answer to the same question, and §3.3 gives them the same code.
+  if resource_target is null: return []
+
+  ; RETURNS THE RAW SURVIVORS, DECIDES ON THE CANONICAL FORMS (0.8.2.21).
+  ; The skip MUST be decided canonically — both layers have to agree on WHICH
+  ; targets survive, which is the whole point of the function — but the value
+  ; handed back is the target AS THE CALLER WROTE IT. 0.8.2.20 returned `ct`
+  ; and contradicted §6.13 in the same revision: that section derives the
+  ; install pattern from this function against the `system/handler/` prefix,
+  ; and its own worked example target is peer-relative, so under a canonical
+  ; return the derivation it states does not fire. Canonicalizing here also
+  ; double-qualifies a bare target through a non-idempotent qualify step.
+  ; A handler needing the absolute form calls canonicalize itself.
+  ; The security property is unchanged: the canonical form of a raw survivor
+  ; is a member of the canonical effective set, so subject ⊆ effective_targets
+  ; holds under either return.
+  caller_exclude = resource_target.exclude or []
+  out = []
+  for target in resource_target.targets or []:
+    ct = canonicalize(target, local_peer_id)    ; total — may be NEVER_MATCH
+
+    ; Caller targeted it then excluded it — redundant but valid, and NOT a
+    ; subject. The skip is correct and is retained: demanding grant coverage
+    ; for a path nobody requested would refuse legitimate traffic. The defect
+    ; was never the skip; it was that only one layer performed it.
+    ; NEVER_MATCH is not skipped here — it cannot be covered by any exclude
+    ; (§5.4 matcher rule), so it stays in the list and is refused below.
+    if is_covered_by(ct, caller_exclude, local_peer_id):
+      continue
+
+    out.append(target)        ; the RAW survivor, not ct (0.8.2.21)
+  return out
+
 check_resource_scope(resource_target, grant_resources_scope, local_peer_id):
-  ; Full scope check. The effective target scope (targets minus caller
-  ; excludes) must be within the effective grant scope (includes minus
-  ; grant excludes).
+  ; Full scope check. The effective target scope must be within the effective
+  ; grant scope (includes minus grant excludes). Behaviour is unchanged from
+  ; 0.8.2.19 except that the effective set is now NAMED rather than computed
+  ; inline, and that both validators below consume their verdicts.
   ;
   ; For concrete targets: check grant include coverage + not in grant exclude.
   ; For pattern targets: check grant include coverage + every overlapping
@@ -2348,18 +2431,20 @@ check_resource_scope(resource_target, grant_resources_scope, local_peer_id):
   grant_include = grant_resources_scope.include
   grant_exclude = grant_resources_scope.exclude or []
 
-  for target in resource_target.targets:
+  for target in effective_targets(resource_target, local_peer_id):
     ct = canonicalize(target, local_peer_id)
+      ; effective_targets returns RAW survivors (0.8.2.21), so this scope check
+      ; canonicalizes for its own matching. Re-canonicalizing is not a second
+      ; derivation of the effective SET — the set is already decided; this is
+      ; the same total function applied to a member of it.
+
     ; Validate concrete path targets at the protocol boundary.
     ; Pattern targets (ending in *) go through pattern matching, not tree access.
+    ; MUST consume the verdict and fail closed (0.8.2.20) — this call
+    ; previously discarded its return and enforced nothing.
     if not is_pattern(ct):
-      validate_absolute_path(ct)
-
-    ; Skip targets fully covered by caller's own exclude.
-    ; (Caller targeted it then excluded it — redundant but valid. Effective
-    ; target doesn't include it, so no authorization needed.)
-    if is_covered_by(ct, caller_exclude, local_peer_id):
-      continue
+      if validate_absolute_path(ct) is error:
+        return false
 
     ; Target must be covered by grant include.
     if not is_covered_by(ct, grant_include, local_peer_id):
@@ -2371,6 +2456,13 @@ check_resource_scope(resource_target, grant_resources_scope, local_peer_id):
       ; Otherwise the effective target includes paths the grant forbids.
       for ge in grant_exclude:
         cge = canonicalize(ge, local_peer_id)
+        ; AN UNMATCHABLE EXCLUDE EXCLUDES EVERYTHING (0.8.2.21 ruling (b)) —
+        ; see matches_scope and the concrete arm below. THIS ARM IS FIRST:
+        ; the overlap test below CONTINUEs on a sentinel, which skips the
+        ; coverage test entirely, so a coverage test that is correct in
+        ; isolation is never reached. The ruling binds at all three
+        ; exclude-reading sites; this is the third (0.8.2.22).
+        if cge == NEVER_MATCH: return false
         if not patterns_overlap(ct, cge):
           continue
         ; This grant exclude carves out paths within our target.
@@ -2381,6 +2473,10 @@ check_resource_scope(resource_target, grant_resources_scope, local_peer_id):
       ; Concrete target: must not be in grant exclude.
       for ge in grant_exclude:
         cge = canonicalize(ge, local_peer_id)
+        ; Unmatchable exclude excludes everything (0.8.2.21) — see
+        ; matches_scope. Without this arm a grant exclude the granter
+        ; misspelled carves out NOTHING and the grant is wider than written.
+        if cge == NEVER_MATCH: return false
         if matches_pattern(ct, cge):
           return false
 
@@ -2489,6 +2585,9 @@ The table below enumerates the surfaces a `verify_request` evaluation can DENY o
 | Request-time (§5.2 step 3) | Capability absent | 403 | `capability_denied` | authz |
 | Request-time (§5.2 step 3) | Capability not in envelope `included` | 403 | `capability_denied` | authz |
 | Request-time (§5.2 step 3) | Capability grantee ≠ EXECUTE author | 403 | `capability_denied` | authz |
+| **Request-time (§5.2 step 2)** | **Author resolved through an unverified address** (`included` key not bound to its entity — §1.8) | **401** | `authentication_failed` | auth |
+| **Request-time (§5.2 step 3)** | **Capability resolved through an unverified address** | **403** | `capability_denied` | authz |
+| **Request-time (§5.5)** | **Chain granter or link signer resolved through an unverified address** | **403** | `capability_denied` | authz |
 | Request-time (§5.5) | Forged root capability | 403 | `capability_denied` | authz |
 | Request-time (§5.4) | Operation / handler / resource scope denied | 403 | `capability_denied` | authz |
 | Request-time (§5.2) | Expired / not-before-violated capability | 403 | `capability_denied` | authz |
@@ -2500,6 +2599,10 @@ The table below enumerates the surfaces a `verify_request` evaluation can DENY o
 | **Pre-dispatch (§1.4)** | **Inbound EXECUTE targets a non-local namespace** | **400** | **`invalid_request`** | **pre-authz** |
 
 **The pre-dispatch row is not an authorization verdict (0.8.2.2).** It fires at §6.5 step 3 — after the envelope is authenticated, but *before* handler resolution and before `check_permission` — so it is neither auth-class nor authz-class: there is no verdict to map, because the request is refused before authorization is consulted at all. It is enumerated here because this table is where an implementer looks for "which surface emits which (status, code)", and its absence is what let the refusal be reported as `404 handler_not_found` (§6.2) or `403 capability_denied`. Both are non-conformant: the first claims the peer has no such handler, the second claims an authorization decision was made. **A peer MUST NOT substitute either for this row**, and the §6.7 RT-8 masking MAY does not license the 404 here — RT-8 is scoped to an *authorization-denied* dispatch, and this input never reaches authorization.
+
+**The three resolution-integrity rows take the class of the lookup they corrupt, not of the check that detects them `[MUST]` (0.8.2.23).** §1.8's binding obligation admits two conformant mechanisms, and they fail at different points: a peer that **binds the key** detects a mis-addressed entry as a map-wide defect, while a peer that **discards the key and addresses by validated `content_hash`** never detects it at all — the lookup simply *misses*, and a miss inherits the row of the step that missed. **A uniform verdict across all three rows is therefore mechanism-shaped and MUST NOT be required**: it would make a key-discarding peer non-conformant for answering the row this table already assigns it.
+
+Two corollaries. **A peer that refuses at the decode boundary** — before the envelope becomes a request — answers **`400 hash_mismatch`** (§3.3; the same code and condition `EXTENSION-CONTENT` §6.3 and `EXTENSION-TREE` Appendix A already define for a mis-keyed `included` entry) and reaches none of these rows; a check set MUST accept either the decode refusal or the per-site row and MUST NOT require both. **A map-wide precondition inside `verify_request` is conformant only if it preserves these classes** — it is the one placement that can manufacture a verdict this enumeration does not assign, so such a peer MUST still answer auth-class for an author forgery and authz-class for a capability or chain forgery. The **grantee** arm is the existing `401 unresolvable_grantee` carve-out, unchanged.
 
 Conformance: `validate-peer`'s `security` and `authz` categories assert these exact (status, code) tuples; conformance vectors `AUTHZ-DELEGATE-GRANT-1`, `AUTHZ-DENY-DEFAULT-1`, `AUTHZ-SCOPE-EXCEEDS-1`, `AUTHZ-GRANTEE-1`, `AUTHZ-REVOKED-1`, `AUTHZ-NO-CATCHALL-1`, `AUTHZ-EXPIRED-1` and `chain_mid_link_expiry_denied` pin the authz rows; the security category pins the auth rows.
 
@@ -2515,14 +2618,27 @@ hash_equals(a, b):
 ### 5.4 Pattern Matching
 
 ```
+NEVER_MATCH = "/never-match"
+  ; The unmatchable value (0.8.2.20). A single-segment absolute path whose first
+  ; segment cannot be a peer_id (is_peer_id requires >= 46 Base58 characters and
+  ; "-" is outside the Base58 alphabet), so it is unreachable as a canonical
+  ; path by construction rather than by prohibition. It is star-free, plain
+  ; ASCII, and greppable. It violates no §1.4 character rule: a sentinel a
+  ; conformant peer's own path validator would classify as malformed input is
+  ; indistinguishable in provenance from a rejected caller string.
+
 canonicalize(path, local_peer_id):
-  ; Resolve peer-relative paths to absolute form.
-  ; Reserved — reject directory-relative paths (§1.4).
+  ; TOTAL (0.8.2.20). Return domain is "a canonical path OR NEVER_MATCH".
+  ; Malformed input yields NEVER_MATCH rather than an error return, because
+  ; every normative call site of this function is a matcher with no error
+  ; channel to consume one (R11). The diagnostic belongs at admission (§6.5),
+  ; which has a caller to answer.
+  ; Reserved — directory-relative paths (§1.4).
   if path starts with "./" or path starts with "../":
-    return error("reserved: directory-relative paths")
-  ; Reject bare peer wildcard — ambiguous without leading /.
+    return NEVER_MATCH
+  ; Bare peer wildcard — ambiguous without leading /; use /*/rest.
   if path starts with "*/":
-    return error("ambiguous: use /*/rest for peer wildcard patterns")
+    return NEVER_MATCH
   ; Already absolute — pass through.
   if path starts with "/": return path
   ; Peer-relative — resolve to local peer.
@@ -2535,6 +2651,10 @@ validate_absolute_path(path):
   ; have a valid peer_id as its first segment — this is structural, not optional.
   ; NOT called on patterns — patterns may have wildcard segments (e.g., /*/*)
   ; which are valid pattern syntax but not valid peer_ids.
+  ; NEVER_MATCH fails here by construction and needs no special case: its first
+  ; segment is not a peer_id. This is the designed destination for the
+  ; diagnostic canonicalize can no longer raise.
+  ; EVERY CALLER MUST CONSUME THIS RETURN (0.8.2.20) — see the rule below.
   if not starts_with(path, "/"):
     return error("not absolute")
   segments = split(path[1:], "/")   ; skip leading /
@@ -2558,6 +2678,11 @@ matches_pattern(path, pattern):
   ; Both path and pattern MUST be canonicalized (absolute) before calling.
   ; Bare "*" is never a top-level input (canonicalizes to /{local}/*).
   ; The "*" check handles recursive sub-patterns from peer wildcard stripping.
+  ; NEVER_MATCH never matches, in either operand (0.8.2.20). This arm is FIRST
+  ; and is a matcher rule, not a property of the string: the arm below returns
+  ; true for a bare "*" operand, so safety MUST NOT rest on a value merely
+  ; looking unmatchable.
+  if path == NEVER_MATCH or pattern == NEVER_MATCH: return false
   if pattern == "*": return true
 
   ; Peer wildcard: /*/rest — match any peer's subtree
@@ -2578,6 +2703,93 @@ matches_pattern(path, pattern):
   ; Exact match
   return path == pattern
 ```
+
+**`canonicalize` is total, and every consumer of its return domain is ruled `[MUST]` (0.8.2.20).**
+`canonicalize` returns *a canonical path or `NEVER_MATCH`*; it does not fail. This replaces two
+`error(...)` returns that **no normative call site in this document could consume** — `matches_scope`
+ends `return matches_pattern(canonicalize(…), canonicalize(…))`, `check_resource_scope` does
+`ct = canonicalize(…)`, and `is_covered_by` canonicalizes inline inside a matcher argument. A declared
+failure mode that every caller structurally discards is not a contract, and implementations did not
+err independently in ignoring it.
+
+**A total function only moves the hazard unless each consumer of the sentinel is told what to do with
+it. This document defines four, and all four are ruled here:**
+
+| Consumer | Rule on `NEVER_MATCH` |
+|---|---|
+| `matches_pattern` (§5.4) | **MUST return false** for either operand — the arm above, stated first |
+| `validate_absolute_path` (§5.4) | **MUST `error`** — it does so by construction (the first segment is not a peer_id), and this is the designed destination for the diagnostic: unlike a matcher, its callers have an error channel |
+| `check_resource_scope` (§5.2), **in BOTH target arms** | An unmatchable **grant exclude MUST deny** — `return false` — and the arm MUST be evaluated **before** the arm's own overlap or match test. *(0.8.2.22 — the pattern arm's coverage test is correct in isolation and was unreachable: `patterns_overlap` `continue`s on a sentinel, skipping it. The concrete arm had the rule; the pattern arm had the same rule written one line too late.)* |
+| Storage and tree access (§5.4's "all tree paths" MUST) | A path that canonicalizes to `NEVER_MATCH` **MUST NOT** be stored, used as a storage key, or resolved against the tree |
+
+**A sentinel arm is a control-flow obligation, not a line `[MUST]` (0.8.2.22).** Where a consumer
+guards against `NEVER_MATCH`, the guard MUST sit on every path that reaches the decision it protects.
+Three of this document's exclude-reading sites take the sentinel; stating the rule per site is what
+let one of them state it unreachably.
+
+**And every `validate_absolute_path` call site MUST consume its return `[MUST]` (0.8.2.20).** This is
+the same defect one function over and it is why the rule is stated as a class rather than patched at
+`canonicalize`: both of this document's call sites — §1.4's `resolve_path` and §5.2's
+`check_resource_scope` — invoked it for effect and **discarded the result**, one of them under a
+comment reading `; MUST — reject malformed peer_id segment`. A validator whose verdict is dropped
+enforces nothing. **Failure is fail-closed: refuse the request** — `400 invalid_path` where a caller
+is being answered (§6.5), `DENY`/`false` inside an authorization predicate.
+
+**Supersedes the `*/` rejection as an error.** A `*/`-leading pattern in a **request path** now matches
+nothing rather than raising a diagnostic nobody receives. A peer that admits such a request and matches
+nothing is conformant; the sentinel is what makes that safe.
+
+> ⛔ **BUT THE SENTINEL'S SAFETY IS DIRECTIONAL, AND `0.8.2.20` ARGUED IT FROM ONE SIDE ONLY
+> `[corrected 0.8.2.21]`.** *Matches nothing* is fail-**closed** in an `include` — covers nothing, so
+> the grant grants nothing — and fail-**OPEN** in an `exclude`: carves out nothing, so **the grant is
+> silently wider than its author wrote.** The worked case is a plausible spelling, not a contrived
+> one: a granter writing `exclude: ["*/secret"]` for *not `secret`, in any peer's namespace* gets an
+> exclusion that excludes nothing, with no error anywhere, because the sentinel is designed not to
+> raise. **The fail-closed disposition was an implementation's prior reading, which `0.8.2.20`
+> reversed; the provenance is in this revision's proposal.**
+
+**So a capability carrying an unmatchable scope pattern is INVALID `[MUST]` (0.8.2.21).** At mint, at
+delegation, and at chain verification, a capability any of whose scope patterns canonicalizes to
+`NEVER_MATCH` MUST be refused — **`400 invalid_path`** at an authoring surface (§6.2 `request` /
+`delegate`), and treated as an invalid capability at verification (§5.5).
+
+- **This is the admission argument applied to the party who is still present.** A request path is
+  admitted and matched; a **grant** is authored once and evaluated thousands of times, and the
+  authoring step is the only moment the **granter** — the party the widening harms — can be told.
+- **It is a MUST rather than a MAY because the two readings diverge across a peer boundary.** One
+  conformant peer refusing the capability and another honouring a grant wider than written are
+  **different authorization decisions on the same bytes**, which is the class this specification pins
+  rather than leaves open.
+- **And the scope check fails closed anyway** — `matches_scope` and `check_resource_scope` treat an
+  unmatchable `exclude` entry as covering everything. **Two layers, because a single layer that
+  caller-or-author input can make vacuous is the defect this revision family exists to close.**
+  `matches_pattern` itself is unchanged and stays uniform over its operands: the position-dependent
+  reading belongs where the position is known.
+
+### Path validation is a property of the BOUNDARY, not of the channel `[MUST]` (0.8.2.21)
+
+**Every path that reaches the location index, the content store, or the tree is validated at that
+boundary — whatever carried it.** A resource target, a URI suffix, a `params` field, an entry of a
+caller-supplied array, or a path the handler built by concatenation are all the same kind of input at
+the point of use.
+
+- **A boundary MUST NOT assume its input was validated upstream, and MUST NOT assert on a malformed
+  path.** A store or index boundary that panics, aborts, or invokes undefined behaviour on
+  caller-derived input is a **remote denial of service**.
+- **Fail closed:** a read at an invalid path is **absent**, a write to one is an **error**, and the
+  request is answered **`400 invalid_path`**.
+- **A comment asserting the input is pre-validated is not an enforcement point.**
+
+> **Why this is stated as a property rather than added to a list of channels.** §5.4's validation MUST
+> already says *"all tree paths (dispatch, storage, entity data path-reference fields)"* and §6.7's
+> rule already names *"URI, resource targets, params"* — **and a pre-validator keyed to the resource
+> target alone was still the shape independently built from it**, because a rule stated over an
+> enumeration of channels invites an implementation that enumerates channels. `system/tree:extract`
+> (`paths[]`) and `:merge` (`target_prefix`) derive tree paths from `params`, which no
+> resource-target pre-validator ever sees. **A wire-reachable remote denial of service of exactly
+> this shape was measured and fixed**: any authenticated peer holding an ordinary grant could crash
+> the connection task. **This is `0.8.2.20`'s `G6` class one layer down — a declared contract no call site honours —
+> with the verdict not merely discarded but converted into a crash.**
 
 Callers MUST canonicalize both the path and the pattern before calling `matches_pattern`. The `check_permission` algorithm (§5.2) canonicalizes handlers and grant patterns using the local peer_id. Handler path-level checks (§6.3) do the same for data paths. Canonicalization ensures all paths and patterns are absolute — `/*/` always has a real peer_id to strip, and peer-relative grant patterns match their absolute equivalents.
 
@@ -2612,9 +2824,41 @@ All scope fields support pattern matching (§5.4) including `*` for match-all. `
 
 1. **Dispatch scope** (`check_permission`, §5.2): The capability MUST contain a grant where the `handlers` scope matches the resolved handler pattern, the `operations` scope includes the requested operation, and the `peers` scope includes the target peer. When the EXECUTE includes a `resource` field, the same grant's `resources` scope must also cover the resource. This check happens at dispatch, before the handler runs. All matched dimensions must come from a single grant entry.
 
-2. **Path scope** (handler-specific, defense-in-depth): Each handler enforces path-level checks against the same capability. The tree handler uses `check_path_permission` (§6.3), which uses `matches_scope` against `handlers`, `operations`, and `resources` scopes. Domain handlers implement equivalent checks. When `resource` is present, this is a secondary defense-in-depth check — the dispatch-level `check_permission` handles the primary resource check. When `resource` is absent, handler-level path checks are the sole resource enforcement. Excludes within `resources.exclude` are applied at this level via `matches_scope`.
+2. **Path scope** (handler-specific): Each handler enforces path-level checks against the same capability. The tree handler uses `check_path_permission` (§6.3), which uses `matches_scope` against `handlers`, `operations`, and `resources` scopes. Domain handlers implement equivalent checks. When `resource` is absent, handler-level path checks are the sole resource enforcement. Excludes within `resources.exclude` are applied at this level via `matches_scope`.
 
 3. **Both levels MUST pass.** Handler scope alone does not authorize any data access. A matching `resources` entry alone does not authorize reaching the handler.
+
+**The handler-level path check is not secondary `[MUST]` (0.8.2.20).** The dispatch-level
+`check_permission` authorizes the request the caller *made*; the handler-level check authorizes the
+path the handler is *about to touch*. These differ whenever any part of the subject is derived after
+dispatch — a caller exclusion (`effective_targets`), a path resolved at handler time, a listing
+expanded per entry, a merge resolving snapshot content into individual writes. **Where the
+dispatch-level check can be made vacuous by caller-controlled input it is not a primary check, and the
+handler-level check is the enforcement.** Earlier revisions characterized it as *defense-in-depth when
+`resource` is present*, on the premise that the dispatch-level check handles the primary resource
+check; **`F68` is the case where that premise is false** — a caller supplying an `exclude` covering its
+own target reaches `ALLOW` having had nothing checked. A characterization asserting the premise is
+wrong on its own terms and **is withdrawn**, here and at §6.3, §6.7, §9.1 and the §8 layer table.
+
+**The subject rule — what a handler may act on `[MUST]` (0.8.2.20).** The subject a handler acts on
+**MUST** be drawn from `effective_targets`: `subject ⊆ effective_targets(ctx.resource,
+ctx.local_peer_id)`. **A handler MUST NOT act on a target `effective_targets` excluded, and MUST NOT
+widen the set.**
+
+- For an operation **requiring exactly one resource**, the subject is `effective[0]` and §3.3's
+  cardinality rule selects the error inputs. **Indexing `resource.targets[0]` is non-conformant** even
+  where the cardinality check was performed on the effective set — `targets:[P,Q] exclude:[P]` with `Q`
+  in-grant has effective `[Q]`, size one, so the arithmetic says *proceed* while `targets[0]` is `P`.
+  **The cardinality check is the ambiguity rule and carries none of the authority; the selection does.**
+- For an operation whose specification defines a **set-valued** subject, the subject is the whole
+  effective list. *(No such operation exists in the corpus at 0.8.2.20 — every specified block requires
+  exactly one. The general form is stated here so the first one that is specified does not re-derive
+  it, and so the rule is not a special case of its own worked example.)*
+
+Where both checks are available, a peer satisfies this rule by deriving its subject from
+`effective_targets`; the handler-level path check is what makes the guarantee hold for subjects derived
+any other way. **Neither is made redundant by the other** and this document does not mandate two sites:
+a peer deriving every subject from `effective_targets` is conformant with one.
 
 4. **Leading slashes required.** All canonicalized paths start with `/` (§1.4). The canonical form is `/{peer_id}/rest/of/path`. Peer-relative paths (`rest/of/path`) are resolved to absolute form by canonicalization (§5.4). Pattern matching operates on absolute paths and absolute patterns.
 
@@ -2696,6 +2940,13 @@ collect_authority_chain(cap, resolve_fn):
 
 ```
 verify_capability_chain(capability, included, local_peer_id):
+  ; PRECONDITION -- RESOLUTION INTEGRITY (0.8.2.23), as §5.2. Stated on this
+  ; function and not only on verify_request because §7a.2a's
+  ; presented-authority arm calls this DIRECTLY, with a bundle merged from a
+  ; parent envelope's `included`, and deliberately relaxes root-trust -- so it
+  ; loses the local-rooted check that incidentally blocked a mis-addressed
+  ; granter. A guard placed only in verify_request does not cover this caller.
+  ;
   ; Evaluation timestamp: sampled ONCE per verdict (v7.76). `t` is a Layer-1
   ; input (§5.10) — the verdict is a function of the chain and `t`, and per-link
   ; re-sampling is forbidden (it would make the verdict depend on wall-clock
@@ -2824,6 +3075,10 @@ check_creator_authority(cap, writer_identity, ctx):
   ;                             available for persistence
   chain = collect_authority_chain(cap, fn(hash) {
     ctx.included[hash] ?? ctx.content_store.get(hash)
+    ; THE TWO ARMS DIFFER IN TRUST (0.8.2.23). The content store is
+    ; content-addressed locally, so its address is verified by construction.
+    ; The `included` arm's address arrives on the wire and is not; it is
+    ; covered by the §5.2 / §5.5 resolution-integrity precondition.
   })
   if is_error(chain):
     return (false, [], chain.error)
@@ -2934,15 +3189,15 @@ grant_covered_by(child_grant, parent_grants, local_peer_id):
 
 grant_subset(child_grant, parent_grant, local_peer_id):
   ; All four scope dimensions must be subsets of the parent's.
-  if not scope_subset(child_grant.handlers, parent_grant.handlers, local_peer_id):
+  if not scope_subset(child_grant.handlers, parent_grant.handlers, "system/capability/path-scope", local_peer_id):
     return false
-  if not scope_subset(child_grant.operations, parent_grant.operations, local_peer_id):
+  if not scope_subset(child_grant.operations, parent_grant.operations, "system/capability/id-scope", local_peer_id):
     return false
-  if not scope_subset(child_grant.resources, parent_grant.resources, local_peer_id):
+  if not scope_subset(child_grant.resources, parent_grant.resources, "system/capability/path-scope", local_peer_id):
     return false
   child_peers = child_grant.peers or {include: [local_peer_id]}
   parent_peers = parent_grant.peers or {include: [local_peer_id]}
-  if not scope_subset(child_peers, parent_peers, local_peer_id):
+  if not scope_subset(child_peers, parent_peers, "system/capability/id-scope", local_peer_id):
     return false
 
   ; Constraint attenuation: key retention + byte equality.
@@ -2970,17 +3225,18 @@ grant_subset(child_grant, parent_grant, local_peer_id):
 
   return true
 
-scope_subset(child_scope, parent_scope, local_peer_id):
+scope_subset(child_scope, parent_scope, dimension_type, local_peer_id):
   ; DISPATCHES ON SCOPE TYPE, exactly as matches_scope does and for the same
   ; reason (§5.2 "Scope types"; pseudocode corrected 0.8.2.16). This function
   ; is called on `operations` and `peers` — both id-scope — as well as on
   ; `handlers` and `resources`. Canonicalizing an id dimension here widens
   ; authority DOWN A DELEGATION CHAIN, which is where nobody re-checks.
   ;
-  ; Both scopes are the same dimension, so they carry the same type; a child
-  ; and parent whose types differ is a malformed grant and MUST be rejected.
-  if child_scope.type != parent_scope.type: return false
-  st = child_scope.type
+  ; The type is supplied BY THE CALL SITE from the dimension being compared
+  ; (0.8.2.22), not read off either wire value. Comparing two received
+  ; `scope.type` fields to each other establishes only that the two agree,
+  ; which a malformed pair does too.
+  st = dimension_type
 
   ; Every child include pattern must be covered by some parent include
   for child_pattern in child_scope.include:
@@ -3252,7 +3508,7 @@ The `unregister` operation reverses all five steps; the grant-signature at `syst
 
 **Behavioral presence is normative** (v7.74 §6.13(a)). A peer claiming `--profile core` (§9.0) MUST execute the five writes above when `register` is invoked; returning `501 unsupported_operation` for `register` or `unregister` is non-conformant. The §9.5 type-floor publication of `register-request` / `register-result` is necessary but not sufficient — the operation's behavioral presence (not just the vocabulary) is the conformance contract.
 
-**Resource carries the install path (§3.2 path-as-resource).** Both `register` and `unregister` derive the pattern from `EXECUTE.resource.targets[0]` (`system/handler/{pattern}`). The handler path is the caller's authorization target — the standard dispatch capability check on `resource` validates that the caller may install/remove a handler at that path. The handler MUST require exactly one resource target: **more than one** target is rejected with **400 `ambiguous_resource`**, and **zero** targets — an absent or empty `resource` — with **400 `path_required`** (0.8.2.18, per §3.3's 400 row; the two inputs have different remedies and the earlier wording collapsed them). Example: `EXECUTE system/handler operation: "register" resource: {targets: ["system/handler/local/files"]} params: <register-request>`.
+**Resource carries the install path (§3.2 path-as-resource).** Both `register` and `unregister` derive the pattern from **`effective_targets(EXECUTE.resource, local_peer_id)[0]`** (`system/handler/{pattern}`) — **never from `EXECUTE.resource.targets[0]` `[MUST]` (0.8.2.20, §5.2's subject rule)**. The handler path is the caller's authorization target — the standard dispatch capability check on `resource` validates that the caller may install/remove a handler at that path. The handler MUST require exactly one **effective** resource target: **more than one** is rejected with **400 `ambiguous_resource`**, **zero** — an absent or empty `resource`, **or one target the caller excluded** — with **400 `path_required`**, and a single **pattern** target with **400 `malformed_resource`** (0.8.2.18 pinned the first two, 0.8.2.20 moves the count onto the effective set and adds the pattern arm; per §3.3's 400 row, where the two error inputs have different remedies). Example: `EXECUTE system/handler operation: "register" resource: {targets: ["system/handler/local/files"]} params: <register-request>`.
 
 `unregister` has no params content beyond the resource — the pattern lives entirely in resource. Callers send the empty-params shape per §3.2.
 
@@ -3498,40 +3754,77 @@ When `entity` is absent or null: removes the binding at the path. The entity rem
 **Capability model**: The tree handler enforces two-level authorization (§5.4):
 
 1. **Dispatch scope**: The capability MUST contain a grant with `handlers` matching `system/tree`, `operations` including the requested operation, and `resources` covering the resource target scope. This is checked by `check_permission` (§5.2) before the handler runs.
-2. **Path scope** (defense-in-depth): The tree handler performs `check_path_permission` as a secondary check. This is essential for backward compatibility with requests that omit `resource`, and for paths resolved at handler time (e.g., merge resolving snapshot content into individual writes).
+2. **Path scope**: The tree handler performs `check_path_permission` on the path it is about to touch. **This is not a secondary check `[MUST]` (0.8.2.20)** — see §5.2. It is the sole enforcement for requests that omit `resource`; it is the enforcement for paths resolved at handler time (e.g., merge resolving snapshot content into individual writes); and where `resource` is present it authorizes a subject the dispatch-level check may never have seen, because the dispatch-level check can be made vacuous by caller-controlled input (`F68`).
 
-Both checks MUST pass. A handler match alone does not authorize any path access. A path match alone does not authorize calling the tree handler.
+Both checks MUST pass. A handler match alone does not authorize any path access. A path match alone does not authorize calling the tree handler. **The path the handler checks and acts on is drawn from `effective_targets` (§5.2), never from `resource.targets` directly.**
 
 ```
-check_path_permission(operation, path, capability, handler_pattern, local_peer_id):
+check_path_permission(operation, path, authority, handler_pattern, local_peer_id):
+  ; `authority` is NOT "the capability on the request" (0.8.2.21). It is the
+  ; authority that authorized THIS dispatch for THIS path, selected by whether
+  ; the access SERVES A LIVE CALLER'S REQUEST (§6.8; discriminator corrected
+  ; 0.8.2.22 — derivation is NOT the test):
+  ;   in service of the caller's request -- named by the caller, OR derived
+  ;   within that request (a listing entry, an extract or snapshot binding,
+  ;   a merge expansion, a subscription payload)
+  ;                    -> ctx.caller_capability, AND ctx.handler_grant as a
+  ;                       ceiling. BOTH must pass.
+  ;   on the handler's own behalf, serving no caller request (an autonomous
+  ;   write, a continuation's onward leg, the handler's own namespace)
+  ;                    -> ctx.handler_grant, and only that
+  ;   peer-root dispatch                   -> no check at all
+  ; The parameter was called `capability` through 0.8.2.20 and two seats filled
+  ; it from the propagated caller_capability, which is ATTRIBUTION and can be a
+  ; token four hops old with unrelated scopes.
+  ;
+  ; `handler_pattern` is the handler that OWNS the operation being authorized,
+  ; NOT the handler running the check (0.8.2.23) -- see the frame rule below.
   ; Called by the tree handler after check_permission (§5.2) passes.
-  ; Defense-in-depth: re-checks resource authorization at the handler level.
-  ; Essential when execute.resource is absent (sole enforcement) and for
-  ; paths resolved at handler time (not known at dispatch time). When
-  ; execute.resource is present, this is a secondary check — dispatch
-  ; already verified the resource target scope.
-  canonical_path = canonicalize(path, local_peer_id)
+  ; NOT a secondary check (0.8.2.20). It authorizes the path this handler is
+  ; ABOUT TO TOUCH, which is not always the request dispatch authorized:
+  ; execute.resource absent (sole enforcement); a path resolved at handler
+  ; time; or execute.resource present but the dispatch-level check made
+  ; vacuous by a caller exclude covering the caller's own target (F68).
+  ; `path` MUST come from effective_targets (§5.2), never resource.targets[0].
+  canonical_path = canonicalize(path, local_peer_id)   ; total — may be NEVER_MATCH
+  ; NEVER_MATCH matches no grant (§5.4), so a malformed path falls through
+  ; to DENY below rather than being matched against anything.
 
-  for grant in capability.data.grants:
-    if not matches_scope(handler_pattern, grant.handlers, local_peer_id):
+  for grant in authority.data.grants:
+    if not matches_scope(handler_pattern, grant.handlers, "system/capability/path-scope", local_peer_id):
       continue
-    if not matches_scope(operation, grant.operations, local_peer_id):
+    if not matches_scope(operation, grant.operations, "system/capability/id-scope", local_peer_id):
       continue
-    if not matches_scope(canonical_path, grant.resources, local_peer_id):
+    if not matches_scope(canonical_path, grant.resources, "system/capability/path-scope", local_peer_id):
       continue
     return ALLOW
   return DENY
 ```
 
-**Listing filter.** When the tree handler returns a listing, each entry MUST be individually checked against the request's capability using `check_path_permission`. Entries for which `check_path_permission` returns DENY MUST be omitted from the listing. The listing's `count` field MUST reflect the filtered entry count, not the source tree's total count.
+**The handler frame — who supplies `handler_pattern` `[MUST]` (0.8.2.23).** `handler_pattern` is **the handler that OWNS the operation being authorized, never the handler performing the check.** When a handler authorizes an access whose operation belongs to another handler's surface — a tree read, a tree write — it passes **that** handler's pattern. The frame answers *whose authority is being spent*, and the answer is the handler whose namespace the access lands in: a caller granted `system/tree: get` has been granted a tree read, and whether it is reached through the history, compute, subscription or query surface is the caller's route, not a second authority they must separately hold.
+
+`EXTENSION-SUBSCRIPTION` §2.3 already states this rule in the imperative for a non-tree handler — *"the subscribe handler MUST additionally verify the caller's capability covers the tree read — `check_path_permission("get", resource_path, caller_capability, "system/tree", local_peer_id)`"* — and this clause generalizes it rather than introducing it. Worked examples across the extension corpus: `EXTENSION-HISTORY` §4.2, `EXTENSION-COMPUTE` §7.2 and `EXTENSION-SUBSCRIPTION` §2.3 all authorize tree access and all pass `system/tree`. **Where the owning handler *is* the running handler the two coincide and the frame is that handler's own pattern** — `EXTENSION-CONTENT`'s `get` passes `system/content`, which is conformant; `system/tree` is not the only legal frame.
+
+**`handler_pattern` is REQUIRED and fail-closed `[MUST]`.** An implementation MUST NOT treat an absent, null or empty `handler_pattern` as *"match all handlers"*. The parameter has no permissive default, and a call site that cannot name its frame is a defect at that call site. Where an authority genuinely grants handler access with no path component, §5.2's `{include: []}` construction states that **at the grant**, where it is auditable — not at the call, where it is invisible.
+
+*(Both directions have been measured in shipped implementations. Supplying the **running** handler refuses a conformant caller: a capability split across `{system/subscription: subscribe}` + `{system/tree: get}` had its `get` grant discarded unread, and the check answered DENY with no dimension to attribute the refusal to — the frame runs upstream of every dimension, so a peer with a perfect matcher and the wrong frame is indistinguishable from one with a broken matcher. Supplying **nothing** widens: a grant scoped to any handler at all authorized a tree read through a compute lookup.)*
+
+**A pattern subject.** `check_path_permission`'s `path` is normally concrete. Where a caller-facing rule routes a **pattern** into it — `EXTENSION-SUBSCRIPTION` §2.3's `include_payload` read check is the worked case — a concrete exclude test is wrong: `matches_pattern` is a literal comparison, so a pattern subject re-spells past a concrete grant exclude it spans. **A pattern subject is authorized exactly as §5.2 authorizes a pattern target**, with the caller-exclude set empty — there is no `resource.exclude` at this call site. Every grant exclude that `patterns_overlap`s the subject is therefore uncovered, and the check **MUST return DENY** `[MUST]` (0.8.2.22). The sentinel rule applies here too: an unmatchable grant exclude denies before the overlap test.
+
+**Listing filter.** When **any handler returns a multi-entry result whose entries are tree paths** — a tree listing, a domain listing, or any bulk enumerator — each entry MUST be individually checked using `check_path_permission`. Entries for which `check_path_permission` returns DENY MUST be omitted. The result's `count` field MUST reflect the filtered entry count, not the source tree's total count. **The authority is §6.8 row 1** — the caller's verified capability, with the executing handler's grant as a ceiling; both MUST pass.
+
+*(0.8.2.22 — this rule read "When the **tree handler** returns a listing" while §6.8's discriminator is general over handlers. A domain listing is a set of caller-derived paths whose existence reaches the caller, so it was covered by the rule and not by the sentence; two independent implementations raised the scope as an open question rather than sweeping it, which is the correct response to a rule narrower than its own principle.)*
 
 ```
-filter_listing(listing, operation, prefix, capability, handler_pattern, local_peer_id):
-  ; Informative — filters listing entries against capability scope.
+filter_listing(listing, operation, prefix, authority, handler_pattern, local_peer_id):
+  ; Informative — filters listing entries against authority scope.
+  ; Parameter renamed from `capability` to `authority` (0.8.2.22), matching the
+  ; function it calls: which authority this is, is §6.8's question, not this
+  ; function's.
   filtered_entries = {}
   for (name, entry) in listing.data.entries:
     entry_path = prefix + name
-    if check_path_permission(operation, entry_path, capability, handler_pattern, local_peer_id) == ALLOW:
+    if check_path_permission(operation, entry_path, authority, handler_pattern, local_peer_id) == ALLOW:
       filtered_entries[name] = entry
   return listing with entries = filtered_entries, count = len(filtered_entries)
 ```
@@ -3616,6 +3909,10 @@ Frame received
   |       |   (hash, signature, capability chain, grantee, revocation if enabled)
   |       +- Canonicalize URI path (§1.4, §5.4)
   |       +- Reject if peer_id != local_peer_id (§1.4 inbound dispatch)
+  |       +- Admit resource targets (§5.4): canonicalize each entry of
+  |       |   execute.resource.targets; any yielding NEVER_MATCH → 400 invalid_path
+  |       |   (0.8.2.20 — this is where the diagnostic canonicalize can no longer
+  |       |    raise belongs: a step with a caller to answer, unlike a matcher)
   |       +- Resolve handler from tree (§6.6)
   |       |   (walk path segments, find system/handler entity → no match → 404)
   |       +- Check permission (§5.2 check_permission)
@@ -3692,7 +3989,7 @@ ingest_envelope_signatures(envelope, ctx):
 
 **First instance of dispatcher-level entity ingestion (informative).** This is the first dispatcher-level mechanism in the core protocol that mutates local tree state in response to entities arriving in `envelope.included`. If a future entity type surfaces that requires canonical-path binding at envelope arrival (similar to how signatures require it for `find_signature_by_signer`), the specification of that ingestion lands as a targeted amendment to this section — naming the entity type, the canonical path pattern, and any conflict / failure semantics. A generic registration hook for extensions to inject their own envelope-arrival processors was considered and deferred: the per-amendment model keeps the dispatcher's mutation surface auditable and avoids opening a generic-extension hook before a second concrete consumer surfaces. When a second consumer surfaces, the architecture team revisits the design (extend this section per-case, or open a registration hook then). Until then: signatures are the only dispatcher-ingested entity type; everything else flows through the in-memory `included` map.
 
-Request integrity (§5.2 `verify_request`) validates hash, signature, capability chain, and grantee match. Permission check (§5.2 `check_permission`) verifies the capability grants the operation on the resolved handler via the `handlers` field, the `operations` field, the `peers` field, and — when `resource` is present — the `resources` field against the resource target scope. All four dimensions must match from a single grant entry. When the resource target contains pattern targets, `check_resource_scope` performs full scope checking: every grant exclude that overlaps a target must be covered by a caller exclude (§5.2). The handler execution context provides the handler with: the handler's own grant (from `system/capability/grants/{pattern}`), the caller's verified capability, the EXECUTE entity, the matched pattern, the URI suffix, and the resource target. The handler dispatches sub-requests with its own grant through standard EXECUTE dispatch; the caller's capability is available as context information (§6.8). Handler-level path authorization (§6.3 `check_path_permission`) is defense-in-depth when `resource` is present, and sole enforcement when `resource` is absent.
+Request integrity (§5.2 `verify_request`) validates hash, signature, capability chain, and grantee match. Permission check (§5.2 `check_permission`) verifies the capability grants the operation on the resolved handler via the `handlers` field, the `operations` field, the `peers` field, and — when `resource` is present — the `resources` field against the resource target scope. All four dimensions must match from a single grant entry. When the resource target contains pattern targets, `check_resource_scope` performs full scope checking: every grant exclude that overlaps a target must be covered by a caller exclude (§5.2). The handler execution context provides the handler with: the handler's own grant (from `system/capability/grants/{pattern}`), the caller's verified capability, the EXECUTE entity, the matched pattern, the URI suffix, and the resource target. The handler dispatches sub-requests with its own grant through standard EXECUTE dispatch; the caller's capability is available as context information (§6.8). Handler-level path authorization (§6.3 `check_path_permission`) is **not a secondary check** (§5.2, 0.8.2.20): it is sole enforcement when `resource` is absent, and when `resource` is present it authorizes the path the handler is about to touch — which is not always the request dispatch authorized. The subject is drawn from `effective_targets` (§5.2).
 
 ### 6.6 Path Dispatch
 
@@ -3779,7 +4076,7 @@ Rationale: a community installing custom handlers via §6.13(a), or eventually i
 |-------|-------|---------------|
 | 0: Wire | Envelope structure | Reject malformed messages |
 | 1: Capability | System-level auth | Check handler + operation + peer + resource (when present) |
-| 2: Handler | Domain semantics + path-level auth | Validate params, defense-in-depth path checks |
+| 2: Handler | Domain semantics + path-level auth | Validate params, path checks on the subject drawn from `effective_targets` (§5.2) |
 
 **Structural enforcement**: The tree extension (EXTENSION-TREE.md §8) provides view trees — capability-scoped projections of the entity tree. When view trees are implemented, handlers receive a filtered tree view matching the request's capability grants. Path-level tree access becomes structurally enforced: handlers cannot access paths outside the grants, providing defense in depth alongside handler-level domain security. Handlers remain capability-aware for domain-specific constraints. The content extension provides complementary scoping for the content store. Implementations targeting production multi-peer environments SHOULD implement view trees.
 
@@ -3814,7 +4111,8 @@ The handler dispatches sub-requests using its own grant — sub-requests are sta
 
 **Write authorization.** A handler's tree writes are authorized by the capability appropriate to the write target. This is a domain-level decision — the handler knows at design time which mode applies to each write.
 
-- **Caller-specified paths.** When a handler writes to paths determined by the caller's request (URI, resource targets, params), the handler MUST verify the caller's capability covers the write path using `check_path_permission`. The caller's capability is the authorization for these writes. If the caller's capability does not cover the path, the write MUST fail — the handler MUST NOT substitute its own grant.
+- **Caller-specified paths.** When a handler **reads or writes at** a path determined by the caller's request (URI, resource targets, params), the handler MUST verify the caller's capability covers that path using `check_path_permission`. The caller's capability is the authorization for that access. If the caller's capability does not cover the path, **the access MUST fail — the handler MUST NOT substitute its own grant.** *(0.8.2.20 — this rule was scoped to **writes**, and the measured harm was a `get`: `F71` disclosed a peer's own seed-policy entity to a caller whose grant did not cover it. Reading an entity the caller's capability does not cover is the same defect with the same cause and a different verb; the failure mode is disclosure rather than mutation.)* **There is no read carve-out, ruled closed `[0.8.2.21]`** — `0.8.2.20` left this open as a caution, and the region searched is now named so the negative is reviewable: §6.3, §6.7, §6.9a and the listing-filter paragraph. **The listing filter already checks every returned entry individually against the request's capability**, which is the read path at its highest volume — so a performance rationale for exempting reads would have had to exempt that too, and does not. No cached-read, snapshot or projection carve-out appears anywhere. A seat that knows of a rationale refutes this by citation. **The authority this check runs against is selected per §6.8 — by who named the path, not by who initiated the chain.**
+- **The subject is the effective set.** A handler MUST NOT act on a target `effective_targets` (§5.2) excluded, and MUST NOT widen the set. Where both the dispatch-level and handler-level checks are available, deriving the subject from `effective_targets` satisfies this rule; the handler-level path check is what makes the guarantee hold for subjects derived any other way.
 
 - **Handler-managed paths.** When a handler writes to paths within its own managed namespace (paths covered by the handler's grant but not by the caller's request), the handler's own grant authorizes the write. These are writes the handler would make regardless of which caller triggered the operation — metadata updates, state management, infrastructure writes.
 
@@ -3835,7 +4133,21 @@ Extensions that record execution context (e.g., EXTENSION-HISTORY) record the ca
 
 For autonomous operations (no external caller), the author is the local peer identity and the caller capability is absent. The handler grant is the sole authority.
 
-**Propagated caller capability is not a dispatch gate (normative).** The authorization decision for an internal sub-request is made on the **executing handler's grant** (§6.5), never on the propagated caller capability. The propagated `caller_capability` exists for exactly two purposes: (a) a caller-specified-path authorization check a handler performs voluntarily when it acts on a path the caller named, and (b) history attribution via the emit pathway (EXTENSION-HISTORY.md §2.1). An implementation MUST NOT fall back to the propagated caller capability to authorize a sub-dispatch that the executing handler's own grant does not permit — doing so is a confused-deputy escalation. This is the dual of "No silent escalation" below: that rule forbids a handler substituting *its own* grant for a caller's failed write; this rule forbids substituting the *caller's* (often broader) capability for the handler's own dispatch authorization.
+**Propagated caller capability is not a dispatch gate (normative).** The authorization decision for an internal sub-request is made on the **executing handler's grant** (§6.5), never on the propagated caller capability. The propagated `caller_capability` exists for exactly two purposes: (a) the caller-specified-path authorization check a handler performs **`[MUST]`** when it acts on a path the caller named (§6.7 — *0.8.2.21 strikes "voluntarily": 0.8.2.20 promoted that check from defense-in-depth to the enforcement and made it act-neutral, and did not sweep this restatement of it*), and (b) history attribution via the emit pathway (EXTENSION-HISTORY.md §2.1).
+
+> **WHICH authority the handler-level check runs against is selected by WHETHER THE ACCESS SERVES A LIVE CALLER'S REQUEST, never by who initiated the chain and never by who derived the path `[MUST]` (0.8.2.21; the discriminator corrected 0.8.2.22).** The two are the same value on the wire and different values everywhere else, and §6.3's parameter — named only `capability` — cannot tell them apart. **Measured:** on a continuation's standing leg the value arriving at `system/tree:put` was the **inbox deliver token** (`handlers:[system/inbox]`, `operations:[receive]`), four hops after the delivery that minted it, because `caller_capability` propagates unchanged **for attribution**. Independent implementations propagate the same field for the same reason and read it at this check, so the ambiguity is structural rather than local.
+>
+> **Derivation is not the discriminator.** A path the handler derived is still the caller's access when its existence, its content, or its effect reaches the caller.
+>
+> | the handler is about to touch | the authority is |
+> |---|---|
+> | a path **in service of the caller's request** — one the caller **named** (resource target, URI suffix, a `params` path), **or one the handler derived within that request**: a listing entry, an extract or snapshot binding, a merge expansion, a subscription payload | **the caller's verified capability** (§6.7) — **and** the executing handler's own grant as an additional ceiling. **Both MUST pass `[MUST]`** |
+> | a path the handler touches **on its own behalf**, serving no caller request — an autonomous write, a continuation's onward leg, a write to the handler's own managed namespace | **the executing handler's own grant**, and only that `[MUST]` |
+> | a **peer-root** dispatch — the peer acting as tree owner | **no check.** The capability is informational, and checking it would make the handler-level check stricter than the dispatch-level one for the same dispatch |
+>
+> **The two rules are duals and both are live.** Row 2 is the confused-deputy rule: a handler MUST NOT substitute the propagated caller capability for its own grant on a path it touches on its own behalf. Row 1 is its converse: **a handler MUST NOT substitute its own grant for the caller's capability on a path whose result reaches the caller.** *(0.8.2.22 — an exclusive three-row table can state only one of them, and the landed model is not exclusive: "Authority only narrows" below, and `EXTENSION-TREE` §8.1/§8.5 authorize a path only if the request capability **and** the handler's `max_scope` both allow it. Flattening the intersection made a handler grant — broad by construction — the authority for listing entries and merge expansions, which makes the listing filter vacuous and lets a narrow caller merge anywhere the tree handler can reach.)*
+>
+> **A deputy's Level-2 authority has a source, and §6.7's context summary names it:** the handler execution context provides *"the handler's own grant (from `system/capability/grants/{pattern}`)"* **and** the caller's verified capability. **A handler whose context carries only the propagated caller capability cannot implement this section at all** — that is an implementation gap, not a gap in this document. A handler that substitutes the propagated caller capability for its own grant on a **derived** path has performed the confused-deputy substitution this section forbids, in the one direction an oracle cannot see: **the defect is wire-invisible, because both readings produce a well-formed response and differ only in which authority was consulted.** An implementation MUST NOT fall back to the propagated caller capability to authorize a sub-dispatch that the executing handler's own grant does not permit — doing so is a confused-deputy escalation. This is the dual of "No silent escalation" below: that rule forbids a handler substituting *its own* grant for a caller's failed write; this rule forbids substituting the *caller's* (often broader) capability for the handler's own dispatch authorization.
 
 **Capability validity.** Whenever a capability is checked — at dispatch, at a handler-level permission check, at a sub-dispatch — it MUST be valid (not expired, not revoked). A revoked capability never passes a check, even if the same capability passed a check earlier in the same operation. Handlers are not required to add extra re-verification of already-checked capabilities between writes within a single operation. The dispatch check (§6.5) and the handler's per-path checks (`check_path_permission`) are the normal verification points. Handlers MAY re-verify capabilities before writes in long-running operations that span significant time between check points — this is domain-specific.
 
@@ -4323,12 +4635,18 @@ A peer claims a **conformance profile** when it presents itself to a conformance
 - **Outbound sub-dispatch authorization (§1.4 — PD-2, 0.8.2.19).** ⚠ **This row RESTATES §1.4's PD-2 block, which is the authority; on any disagreement §1.4 wins and this row is the defect.** *(Stated because it drifted twice in two revisions — `0.8.2.19` corrected §1.4 and left this row publishing the superseded rule both times, once on the two-arm framing and once on the multi-signature conditional. **A fold that changes the PD-2 block edits this row in the same commit.**)*  `check_permission` runs before a locally-originated sub-dispatch leaves the peer, all four dimensions applied, `target_peer = extract_peer(uri, local_peer_id)`. **ONE gate and ONE exemption:** the **executing handler's grant** decides all four dimensions (§6.8), and a valid capability **minted by the target peer naming this peer as `grantee`** relaxes **Dimension 4 (`peers`) and only Dimension 4**, to the peers that capability covers. **The target answers *where*; the handler's grant answers *what*.** A credential is **not** a grant — with no handler grant there is nothing to supply Dimensions 1-3 and the sub-dispatch is refused. The credential MUST be verified — chain-**ROOT** `granter` = target, **leaf** `grantee` = local, valid, not revoked, and covering the request on its own four dimensions; one that fails any of these relaxes nothing and the handler grant gates unrelaxed. **A check set MUST discriminate a COMPOSE from a BYPASS:** the two obvious vectors — both sources agree → allow, no source → refuse — are exactly the two that pass a peer whose credential path bypasses the grant. The discriminating vector is a **valid credential presented to a handler whose own grant does not cover the request → MUST refuse**. **The bindings the gate needs:** the credential evaluated in the **target's** frame and the handler's grant in the **local** frame; Dimension 1's handler pattern the target uri's **peer-relative path**; a **multi-signature root NEVER relaxing Dimension 4** — *minted by the target* means the target **solely** minted it, and a K-of-N root is a group's authority; and scope decided by **authority provenance** — every dispatch that spends a handler's grant, autonomous origination included, and not one that spends the peer's own root authority
 - **Envelope-`included` signature ingestion on ANY received envelope (§6.5, 0.8.2.19).** Signature entities are bound at the §3.5 invariant pointer path from the `included` map of every envelope the peer receives — inbound EXECUTE, connect/authenticate response, `EXECUTE_RESPONSE` (notably the §6.2 `request`/`delegate` result), and async-delivery envelopes. A capability whose signature is only held in memory leaves every chain rooted at it unverifiable locally, and the gap is invisible until a presented-authority sub-dispatch (§1.4) must verify an attenuated chain
 - Pattern matching and scope checking via `matches_scope` (§5.2, §5.4)
-- Dispatch-level resource authorization via `check_resource_scope` when `resource` is present (§5.2) — full scope checking: effective target scope (targets minus caller excludes) within effective grant scope (includes minus grant excludes)
+- **Dispatch-level resource authorization via `check_resource_scope` when `resource` is present (§5.2)** — full scope checking: the effective target scope within the effective grant scope (includes minus grant excludes). ⚠ **The effective target scope is `effective_targets` (§5.2), which is the authority; this row MUST NOT restate its derivation.** *(0.8.2.20 — this row derived it a third time, in prose, as "targets minus caller excludes", in the section a new implementation builds from. `F68` is two layers deriving one set independently and drifting; a floor row that derives it again is the same defect in the document that diagnoses it.)*
+- **The subject a handler acts on is drawn from `effective_targets` (§5.2), never `resource.targets[0]`** — `subject ⊆ effective_targets`, and for a resource-requiring operation `effective[0]` with §3.3's cardinality rule selecting `path_required` / `ambiguous_resource` / `malformed_resource`. Implementing the cardinality check alone leaves the bypass open (0.8.2.20)
+- **`canonicalize` is total and every consumer of `NEVER_MATCH` is ruled (§5.4)** — `matches_pattern` returns false on either operand; `validate_absolute_path` errors; such a path is never stored or resolved. **Every `validate_absolute_path` call site consumes its verdict and fails closed** (0.8.2.20)
+- **An unmatchable pattern in an `exclude` array excludes EVERYTHING, and a capability carrying one is INVALID (§5.4, §5.2 — 0.8.2.21).** The sentinel is fail-closed in an `include` and fail-**open** in an `exclude`; both the refusal at authoring and the deny at evaluation are required, because a single layer author input can make vacuous is not a gate
+- **Path validation is a property of the BOUNDARY, not of the channel (§5.4 — 0.8.2.21).** Every path reaching the index, store or tree is validated there, whatever carried it — resource target, URI, **`params`**, array entry, or handler-constructed. **A boundary MUST NOT assert on a malformed path**: reads absent, writes error, `400 invalid_path`
+- **The handler-level check's authority is selected by WHO NAMED THE PATH (§6.8 — 0.8.2.21)** — caller-named → the caller's verified capability; handler-derived → the executing handler's own grant; peer-root → no check. **The propagated `caller_capability` is attribution and is never the authority for a derived path**
+- **`effective_targets` returns the RAW survivors and decides the skip on canonical forms (§5.2 — 0.8.2.21).** A canonical return contradicts §6.13's own derivation and worked example
 - Structured grant attenuation: handlers, operations, resources, peers scope subset checks; constraint key retention + byte equality; allowance key containment + byte equality (§5.6)
 - Delegation chain verification (§5.5)
 - Delegation caveat checking (§5.7)
 - System tree handler with `get` and `put` operations (§6.3) — `resource` field carries target scope as `system/protocol/resource-target`
-- Two-level capability check for tree operations (§6.3) — dispatch scope via `check_permission`, defense-in-depth path scope via `check_path_permission`
+- Two-level capability check for tree operations (§6.3) — dispatch scope via `check_permission`, **path scope via `check_path_permission`, which is not a secondary check** (§5.2, 0.8.2.20): it is the enforcement wherever the subject is derived after dispatch, and the dispatch-level check can be made vacuous by caller-controlled input
 - *(0.8.2.13 — **"System path reservation — user handlers MUST NOT register at `system/*`" is WITHDRAWN and is no longer a conformance requirement.** Install authorization at any path, `system/*` included, is the standard dispatch capability check on `resource` (§6.2, §6.13). A peer that refuses `system/*` registrations is applying deployment policy and remains conformant; so does one that permits them.)*
 - Handler manifests at pattern paths as `system/handler` entities (§6.1)
 - Handlers handler with `register` and `unregister` operations (§6.2)
@@ -4498,7 +4816,11 @@ A peer claiming **`--profile core`** MUST pass the following tree-operations vec
 | `CORE-TREE-PUT-CAS-2` | `system/tree:put` with non-zero `expected_hash` matching the current binding → 200; non-matching → 409 `hash_mismatch`. | §3.9 |
 | `CORE-TREE-DELETE-1` | `system/tree:put` of `system/deletion-marker` at a bound path → 200; subsequent `get` returns the marker (not the prior entity); listing omits the path under the §6.3 filter convention. | §1.2a, ENTITY-NATIVE-TYPE-SYSTEM.md §4.9 |
 | `CORE-TREE-LISTING-1` | `system/tree:get` on a prefix path returns a `system/tree/listing` entity whose `entries` enumerate exactly the bound paths under the prefix the caller's capability covers; listing entries for paths the cap does not cover are omitted (§6.3). | §6.3, §9.1 |
-| `CORE-TREE-PATH-FLEX-1` | Path validation per §1.4: reject null byte (400); reject leading slash in caller-supplied paths (400); reject `./` and `../` (400 per §5.4 canonicalize); accept multi-segment paths and Unicode segments; the existing `path_reject_empty_segment` pin is part of this vector. | §1.4, §5.4 |
+| `CORE-TREE-PATH-FLEX-1` | Path validation per §1.4: reject null byte (400); reject leading slash in caller-supplied paths (400); reject `./` and `../` (400 `invalid_path` **at §6.5 admission** — 0.8.2.20 moved the diagnostic there; `canonicalize` is total and yields `NEVER_MATCH`, so a peer that admits such a request and matches nothing is **also** conformant); accept multi-segment paths and Unicode segments; the existing `path_reject_empty_segment` pin is part of this vector. | §1.4, §5.4 |
+| `CORE-RESOURCE-EFFECTIVE-1` | **The subject is the effective set (§5.2, §3.3 — 0.8.2.20).** Five arms, and the first three are security vectors: **(a)** `targets:[P] exclude:[P]`, `P` outside the caller's grant → **400 `path_required`** *(the `F68` bypass; three artifacts answered `200` with an unauthorized entity)*; **(b)** `targets:[P,Q] exclude:[P]`, `Q` in-grant, `P` not → proceed **on `Q`** — **decided by a witness field, never by the status**, since both answers are `200` and only the returned entity identifies which target was read (`GUIDE-CONFORMANCE` §2.4c); **(c)** the antecedent control: same `P`, **no** `exclude` → **403 `capability_denied`**; **(d)** two targets, no exclusion → **400 `ambiguous_resource`**; **(e)** a single pattern target on a resource-requiring op → **400 `malformed_resource`**. ⚠ **The target peer MUST be running under a grant that does not cover `P`** — every generated peer's default harness launches with an open seed policy, under which nothing is out of grant and this composition has nothing to bypass, so a run in that configuration reports the guard holding for a reason unrelated to the guard. | §3.3, §5.2, §6.3 |
+| `CORE-EXCLUDE-UNMATCHABLE-1` | ⭐ **The sentinel's fail-OPEN direction (§5.2, §5.4 — 0.8.2.21). Wire-observable, and it is a security vector.** Mint a capability with `resources: {include: ["/*/*"], exclude: ["*/secret"]}` and request `/{peer}/secret` → **MUST deny**. A peer on the `0.8.2.20` rule **allows** it, because `*/`-leading canonicalizes to `NEVER_MATCH` and an exclude that matches nothing carves out nothing. **The discriminating control is a well-formed `exclude: ["/*/secret"]` beside it** — without that arm the row cannot tell a working exclusion from a peer that denies everything. Second arm: minting or delegating such a capability **MUST be refused** (`400 invalid_path`). | §5.2, §5.4, §6.2 |
+| `CORE-PARAMS-PATH-TOTAL-1` | ⭐ **A malformed path carried by `params` (§5.4 — 0.8.2.21).** EXECUTE `system/tree:extract` with a **valid** resource target and `paths: ["\x01x"]` → **MUST answer 4xx and MUST NOT crash the connection task.** **It cannot be a false pass:** a peer that pre-validates only the resource target answers `200` or dies; a peer that validates at the boundary answers `400`. The same shape applies to `:merge`'s `target_prefix`. *(A wire-reachable remote DoS of exactly this shape was found and fixed in one implementation; the pre-validator saw `resource.targets` and the handler derived its path from `params`.)* | §5.4, §6.3 |
+| `CORE-CANONICALIZE-TOTAL-1` | **`R11` (§5.4 — 0.8.2.20).** A `*/`-leading pattern in a grant matches nothing and does not error; `matches_pattern` returns false when either operand is `NEVER_MATCH`, **including against a bare `*` or `/*/*` pattern**; `validate_absolute_path` errors on it and **every call site consumes that verdict** — the discriminating arm is a malformed target reaching `check_resource_scope`, which MUST return `false` rather than proceeding on a discarded verdict. | §1.4, §5.4, §5.2 |
 
 These vectors are also required reading for any conformance oracle implementing `--profile core` — they are the spec-derived behavioral pins the oracle scores against. EXTENSION-TREE.md §9 operations (`snapshot`, `diff`, `merge`, `extract`, `tracked`) are NOT part of this vector set and are skipped under `--profile core`.
 
