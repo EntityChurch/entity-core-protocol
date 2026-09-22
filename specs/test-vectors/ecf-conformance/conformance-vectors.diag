@@ -1,5 +1,5 @@
 /
-  ECF Conformance Vectors — v1 corpus (LOCKED)
+  ECF Conformance Vectors (LOCKED)
   Spec:       ENTITY-CBOR-ENCODING.md v1.5, Appendix E
   Guide:      GUIDE-CONFORMANCE.md (the cross-impl publication procedure)
   Status:     LOCKED. All `encode_equal` `canonical` fields filled from the
@@ -8,7 +8,7 @@
               authored directly (wire bytes the decoder MUST reject).
 
   Format:     CBOR diagnostic notation, RFC 8949 §8. The sibling
-              `conformance-vectors-v1.cbor` is the canonical-ECF-encoded
+              `conformance-vectors.cbor` is the canonical-ECF-encoded
               build artifact (the binary file impls load).
 
   Categories: see Appendix E §E.1. Class A (canonical encoding) +

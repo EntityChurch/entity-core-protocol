@@ -20,11 +20,15 @@ everything above it (extensions, SDK, applications) is optional and lives in the
 | `ENTITY-CORE-PROTOCOL` | the protocol — Layers 0–4; the universal-address-space / tree model |
 | `ENTITY-CBOR-ENCODING` | the Entity Canonical Form (ECF) wire contract + conformance corpus |
 | `ENTITY-NATIVE-TYPE-SYSTEM` | the core type system and native types |
-| `ENTITY-CORE-MACHINE-SPEC` | condensed implementation reference |
 | `test-vectors/` | ECF + crypto-agility conformance corpora |
 
 **Start with** `ENTITY-CORE-PROTOCOL`. The five load-bearing invariants implementers keep
 re-deriving are collected in the model primer (ships alongside).
+
+Those three specs plus the corpus are the entire contract. **There is no condensed or
+"implementation" edition, deliberately** — a former `ENTITY-CORE-MACHINE-SPEC` was retired on
+2026-08-31 because a hand-maintained restatement of a specification drifts against it silently, and
+this one had. If you hold a citation to it, `docs/archive/INDEX.md` names the replacement.
 
 ## Roadmap
 

@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.2
+**Version**: 0.8.2.3
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md
@@ -303,6 +303,13 @@ There is no `extract_handler_path` operation that strips the peer ID. Canonicali
 
 All handlers are peer-local. A peer processes only requests targeting itself. Cross-peer request forwarding is provided by the relay system extension or other domain-specific handlers — in those cases, the caller explicitly targets the relay handler's path, not the remote peer's URI directly.
 
+**Where the `peers` dimension is evaluated (normative, 0.8.2.2).** The three dispatch classes above are not interchangeable inputs to authorization, and the distinction decides where the §5.2 Dimension 4 (`peers`) check does work:
+
+- On **inbound dispatch**, the refusal above runs at canonicalization — §6.5 step 3, *before* handler resolution and *before* `check_permission`. So `target_peer == local_peer_id` always holds by the time Dimension 4 runs on this path. **The check is not redundant here; it is unreachable here.**
+- On **internal dispatch**, a locally-originated sub-request MAY name a foreign namespace, so `extract_peer(uri, local)` can differ from `local_peer_id`. **This is the class the `peers` dimension exists for**: it scopes which peers a grant may be used *against* on an outbound sub-dispatch, not which peers may call in.
+
+A grant carrying no `peers` scope therefore defaults to `{include: [local_peer_id]}` (§3.6) and is **still checked** — it authorizes sub-dispatch at the local peer's own handlers and nothing further. Implementations MUST NOT conclude from the inbound path's invariant that the dimension is inert and MUST NOT skip the check on an absent `peers` field; doing so authorizes a foreign namespace under a grant nobody scoped for one.
+
 **Path rules.** Paths are UTF-8 strings. Two characters are reserved:
 
 | Character | Meaning |
@@ -511,7 +518,7 @@ Implementations MUST maintain fidelity throughout the system:
 4. **Forward original**: When re-transmitting, use stored original. MUST NOT re-serialize.
 5. **Preserve unknown fields**: SHOULD preserve fields not understood. Enables forward compatibility and valid signatures through relay.
 
-**Application — identity references.** A reference to another peer's identity (a cap `grantee`/`granter`, a `signature.signer`, any `system/hash` naming a `system/peer`) is the *authored* `content_hash` of that identity entity — the form its keyholder presents on the wire (carried as `signature.signer` during the handshake, §4.6). An implementation constructing such a reference MUST use that authored hash and MUST NOT recompute the identity entity's hash under its own `content_hash_format`. Under §4.5a item 1a the `system/peer` identity entity is authored at the **ECFv1-SHA-256 floor unconditionally**, so the authored form and the floor-derived form are **the same bytes on every connection** — not a per-connection coincidence to be preserved, but an identity. The prohibition is therefore not in tension with deriving an identity hash from a peer-id in order to build a `{peer_id_hex}` path segment (`SPECIFICATION-FORMAT.md` §8.4.6): both routes yield one value. It remains the direct consequence of item 2 ("trust validated hash … MUST NOT recompute from internal structures"), and it still binds every *other* entity: re-deriving a received identity under the local format manufactures a second content_hash for one identity and breaks the §5.2 `grantee == author` / `signer == author` equality.
+**Application — identity references.** A reference to another peer's identity (a cap `grantee`/`granter`, a `signature.signer`, any `system/hash` naming a `system/peer`) is the *authored* `content_hash` of that identity entity — the form its keyholder presents on the wire (carried as `signature.signer` during the handshake, §4.6). An implementation constructing such a reference MUST use that authored hash and MUST NOT recompute the identity entity's hash under its own `content_hash_format`. Under §4.5a item 1a the `system/peer` identity entity is authored at the **ECFv1-SHA-256 floor unconditionally**, so the authored form and the floor-derived form are **the same bytes on every connection** — not a per-connection coincidence to be preserved, but an identity. The prohibition is therefore not in tension with deriving an identity hash from a peer-id in order to build a `{peer_id_hex}` path segment (`SPECIFICATION-FORMAT` §8.4.6 (`entity-system-architecture`)): both routes yield one value. It remains the direct consequence of item 2 ("trust validated hash … MUST NOT recompute from internal structures"), and it still binds every *other* entity: re-deriving a received identity under the local format manufactures a second content_hash for one identity and breaks the §5.2 `grantee == author` / `signer == author` equality.
 
 ### 1.9 Namespace Design
 
@@ -820,7 +827,7 @@ Status codes:
 |------|---------|
 | 200 | Success |
 | 207 | Partial success — binding committed but cascade halted. See SYSTEM-COMPOSITION.md §2.7A for the `system/tree/partial-result` response envelope. |
-| 400 | Bad request |
+| 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`. `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
 | 401 | Authentication failed (also: `capability_revoked` per `EXTENSION-ROLE.md` §5.5; `unresolvable_grantee` per §5.5 of this doc — cap's `grantee` does not resolve to a present `system/peer` entity) |
 | 403 | Forbidden — request-time authorization DENY (§5.2). Default `code` = `capability_denied`; more-specific authorization codes: `scope_exceeds_authority` (capability handler request subset-validation, §6.2). See §5.2 verdict-to-status mapping. |
 | 404 | Not found |
@@ -1032,7 +1039,7 @@ system/capability/token := {
 
 **Scope types.** Two scope types provide typed structure for grant dimensions. `system/capability/path-scope` is for dimensions whose values are tree paths (handlers, resources) — its `include` and `exclude` arrays hold `system/tree/path` values. `system/capability/id-scope` is for dimensions whose values are identifiers (operations, peers) — its arrays hold `primitive/string` values. Both have the same `{include, exclude}` structure. The `matches_scope` algorithm (§5.2) accesses these fields structurally but matches each dimension **by its scope type** (0.8.1, F40): `path-scope` values (handlers, resources) are canonicalized to absolute paths (§1.4) before comparison; `id-scope` values (operations, peers) are compared as literal identifiers. The two MUST NOT be interchanged — a path dimension matched literally, or an id dimension canonicalized, is a conformance defect (it produced a real ALLOW bug; two impls guessing the typing diverge on ALLOW across a peer boundary).
 
-**id-scope pattern grammar (normative — 0.8.1, F40).** An id-scope pattern (`operations`, `peers`) matches the **raw value as a literal string** with exactly two wildcard forms: **bare `*`** matches any value, and a **trailing `/*`** matches by literal segment-prefix (`compute/*` matches `compute/apply` — meaningful for `/`-namespaced operation names; peer-ids are flat, so peer patterns use a literal id or `*`). id-scope **MUST NOT** apply the §5.4 path transforms: **no** leading-`/` universal-scope reading, **no** `/*/` interior peer-wildcard, **no** peer-relative→`/{local_peer_id}/…` qualification. A pattern carrying that path syntax (`/*/get`, `/{peer}/op`, `/*/*`) is therefore matched **only as a literal string** and does not match a bare identifier value. This is deliberately **not** the §5.4 `matches_pattern` used for `path-scope` — that function canonicalizes, and applying it to `id-scope` is the F40 defect. *(Consequence: the conformant reading is literal; a peer that canonicalizes `id-scope` over-grants on `include` path-form patterns and inverts the intent on `exclude` — the A-SQL-008 ALLOW-bug class. A cohort peer on the canonicalizing reading is non-conformant on F40 and MUST adopt the literal matcher.)*
+**id-scope pattern grammar (normative — 0.8.1, F40).** An id-scope pattern (`operations`, `peers`) matches the **raw value as a literal string** with exactly two wildcard forms: **bare `*`** matches any value, and a **trailing `/*`** matches by literal segment-prefix (`compute/*` matches `compute/apply` — meaningful for `/`-namespaced operation names; peer-ids are flat, so peer patterns use a literal id or `*`). id-scope **MUST NOT** apply the §5.4 path transforms: **no** leading-`/` universal-scope reading, **no** `/*/` interior peer-wildcard, **no** peer-relative→`/{local_peer_id}/…` qualification. A pattern carrying that path syntax (`/*/get`, `/{peer}/op`, `/*/*`) is therefore matched **only as a literal string** and does not match a bare identifier value. This is deliberately **not** the §5.4 `matches_pattern` used for `path-scope` — that function canonicalizes, and applying it to `id-scope` is the F40 defect. *(Consequence: the conformant reading is literal; a peer that canonicalizes `id-scope` over-grants on `include` path-form patterns and inverts the intent on `exclude` — the A-SQL-008 ALLOW-bug class. An implementation on the canonicalizing reading is non-conformant and MUST adopt the literal matcher.)*
 
 **Grant-entry fields:**
 
@@ -1041,7 +1048,7 @@ system/capability/token := {
 | `handlers` | `system/capability/path-scope` | Yes | Handler patterns — which handlers can be called (e.g., `{include: ["system/tree"]}`). Uses `matches_pattern` (§5.4). |
 | `resources` | `system/capability/path-scope` | Yes | Data path patterns — which paths can be accessed. `exclude` on this scope replaces the former top-level `exclude` field. |
 | `operations` | `system/capability/id-scope` | Yes | Allowed operations (e.g., `{include: ["get"]}`). Matched **literally** per the id-scope grammar above (**not** the §5.4 path `matches_pattern`); `{include: ["*"]}` matches any operation, `{include: ["compute/*"]}` any `compute/…` operation. |
-| `peers` | `system/capability/id-scope` | No | Peer scope — which peers the grant applies to. When absent, defaults to local peer only (`{include: [local_peer_id]}` constructed at evaluation time). Peer IDs are explicit — there is no `"self"` alias. |
+| `peers` | `system/capability/id-scope` | No | Peer scope — which peers the grant applies to. When absent, defaults to local peer only (`{include: [local_peer_id]}` constructed at evaluation time) and **is still checked** — absent is a default, not a skip. Peer IDs are explicit — there is no `"self"` alias. **Reachability (0.8.2.2):** the peer under test is `extract_peer(execute.uri, local_peer_id)` (§5.2), which can differ from `local_peer_id` only on §1.4's **internal-dispatch** class; inbound requests naming a foreign namespace are refused at §6.5 step 3 and never reach this check. The default is therefore not dead weight — it is what stops an unscoped grant authorizing an outbound sub-dispatch at a peer it was never scoped to. |
 | `constraints` | `map_of: primitive/any` | No | Domain-specific narrowing fields (string keys → any values). Handler-interpreted. Keys can't be dropped and values must be byte-equal during delegation (§5.6). |
 | `allowances` | `map_of: primitive/any` | No | Domain-specific expanding fields (string keys → any values). Handler-interpreted. Keys can't be added and values must be byte-equal during delegation (§5.6). |
 
@@ -1522,9 +1529,7 @@ Stored at `system/peer/status/{peer_id}`. State transitions: `(unknown) → conn
 
 **`reason`, `last_error`, `failing_since` (0.8.1, additive).** All three OPTIONAL and omitted when unpopulated, so a peer that never sets them emits byte-identical entities to the pre-0.8.1 shape. **No wire change, no renumber, no new error code.** They are declared here rather than in the extension that gave them meaning, because this is where the type is declared.
 
-**`failing_since` is transition-written, and that is load-bearing.** It records the *episode*, not the attempt: set once when the peer leaves `connected`, cleared once when it returns. Retry `attempt` and `next_attempt_at` are **derived** from `(failing_since, now, backoff-config)` and MUST NOT be stored — storing them would mean a tree write per retry attempt, and every write to this entity fans out to every lifecycle subscriber. The derivation is pinned by the consuming extension (`EXTENSION-NETWORK` Amendment 12 §A6.5), because an unpinned derivation relocates a divergence rather than removing it. A durable `failing_since` is also what lets a restarting peer resume at the correct backoff escalation instead of dropping back to its minimum.
-
-*Adopted from three-way convergence rather than legislated ahead of it: `entity-core-go`, `entity-core-rust` and `entity-core-py` each stamp `failing_since`, **measured on the wire 3-of-3** on 2026-08-13 (`network_reconnect_anchor` PASS, 5/5 with 0 skips per seat; reported by `entity-core-go`, whose own check had been holding this at WARN on a stale build-state comment). The field was live in three interoperating implementations and in no landed spec — the same shape as the `chain_id` defect corrected the same day, caught one step earlier.*
+**`failing_since` is transition-written, and that is load-bearing.** It records the *episode*, not the attempt: set once when the peer leaves `connected`, cleared once when it returns. Retry `attempt` and `next_attempt_at` are **derived** from `(failing_since, now, backoff-config)` and MUST NOT be stored — storing them would mean a tree write per retry attempt, and every write to this entity fans out to every lifecycle subscriber. The derivation is pinned by the consuming extension (`EXTENSION-NETWORK` §A6.5), because an unpinned derivation relocates a divergence rather than removing it. A durable `failing_since` is also what lets a restarting peer resume at the correct backoff escalation instead of dropping back to its minimum.
 
 ```
 system/peer/self/status := {
@@ -1638,7 +1643,7 @@ The initiator sends EXECUTE hello; the responder replies with EXECUTE_RESPONSE c
 - `system/protocol/connect` is the sole pre-authorized path.
 - EXECUTE targeting this path MUST be accepted without `author` or `capability` fields.
 - EXECUTE targeting any other path without valid authentication MUST be rejected per §5.2a: a missing/unverifiable `author` or signature is auth-class **401**; an authenticated request lacking a covering capability is authz-class **403** (0.8.1, F32 — this rule previously said a blanket 403, contradicting §4.4/§5.2a).
-- The connection handler MUST enforce ordering: `hello` before `authenticate`.
+- The connection handler MUST enforce ordering: `hello` before `authenticate`. An `authenticate` received before a hello nonce has been issued MUST be rejected with status **401 `invalid_nonce`** (§4.6 step 1; §4.7's row 6) — it is an authentication failure, not a malformed request, because a captured `authenticate` replayed onto a fresh connection is exactly this input. It is **not** §4.7's out-of-order row (0.8.2.1, FM-1 — this bullet previously stated the ordering obligation with no status or code, and §4.7's "out-of-order operation" row was the only lexical match for it).
 - After connection is established, subsequent connection requests on the same connection MUST be rejected with status 409. Implementations MUST NOT issue a new capability token on reconnect.
 
 Connection state is per-connection. A new connection requires a new handshake sequence.
@@ -1800,7 +1805,7 @@ The `hash_formats` negotiation (§4.5) selects one **active `content_hash_format
 
 1. Every entity a peer authors **on the wire/identity surface** for transmission on this connection — the EXECUTE and EXECUTE_RESPONSE envelope framing, the capabilities it mints for this connection, and signatures — MUST be content-hashed under the active format. This is the surface where identity-equality (`grantee == author`, `signer == author`; §5.2) is evaluated; keeping it single-format per connection is what makes that equality byte-exact.
 
-   **1a. Exception — the `system/peer` identity entity is pinned to the floor (normative, v7.77).** The identity entity a peer presents (§4.6's `peer_entity`) is authored under **ECFv1-SHA-256 (`0x00`) unconditionally** — on every connection, whatever the active format, and whatever the peer's home format. It is the one entity on this surface with **no author-chosen content**: its data is `{peer_id, public_key, key_type}`, wholly recoverable from the public peer-id, so every consumer *derives* its hash rather than fetching it — a `[derive-to-meet]` value by `SPECIFICATION-FORMAT.md` §8.4.6's test. Pinning it does not weaken this item's purpose, it **over-satisfies** it: the identity hash becomes the same bytes on every connection in the network rather than merely within one, so `signature.signer`, cap `grantee`/`granter`, and the `{peer_id_hex}` path segment are **one value** instead of two that coincide only while the active format happens to be the floor. This is the single exception to §1.2's "a peer's persistent state is uniformly its home format" — a non-floor-home peer stores its own `system/peer` entity at its floor hash, and nothing else changes.
+   **1a. Exception — the `system/peer` identity entity is pinned to the floor (normative, v7.77).** The identity entity a peer presents (§4.6's `peer_entity`) is authored under **ECFv1-SHA-256 (`0x00`) unconditionally** — on every connection, whatever the active format, and whatever the peer's home format. It is the one entity on this surface with **no author-chosen content**: its data is `{peer_id, public_key, key_type}`, wholly recoverable from the public peer-id, so every consumer *derives* its hash rather than fetching it — a `[derive-to-meet]` value by `SPECIFICATION-FORMAT` §8.4.6 (`entity-system-architecture`)'s test. Pinning it does not weaken this item's purpose, it **over-satisfies** it: the identity hash becomes the same bytes on every connection in the network rather than merely within one, so `signature.signer`, cap `grantee`/`granter`, and the `{peer_id_hex}` path segment are **one value** instead of two that coincide only while the active format happens to be the floor. This is the single exception to §1.2's "a peer's persistent state is uniformly its home format" — a non-floor-home peer stores its own `system/peer` entity at its floor hash, and nothing else changes.
 2. A peer MUST NOT author a **wire/identity-surface** entity under a format outside the negotiated active value. **Content entities** (handler-produced results, stored data, tree nodes, async-delivery and subscription-notification bodies) are NOT required to be re-authored under the active format — they carry their own home-format (§1.2) `content_hash` and travel self-describing; the receiver validates them by their declared format byte. When the sender's home format differs from the connection active format, such content does not converge with the receiver's same-logical-input content (the §1.2 / §1.5 two-address-space case); this is expected, not an error.
 3. **Relay carve-out.** An entity a peer *received earlier* under a different format and is merely *relaying* by reference follows §1.8 fidelity — it is forwarded as its original bytes, never re-authored. Relaying such a reference *across a connection whose active format differs* is the cross-content-address-space case, out of v1 scope per §1.5 (a translator handler's concern, not core's).
 4. Consequently, **within a single connection there is exactly one `content_hash_format` in play** for authored traffic, and identity-equality comparisons (`grantee == author`, `signer == author`; §5.2) remain correct as byte-wise hash equality (§5.3). A peer MUST NOT re-derive a *received* identity's `content_hash` under a different (e.g. its own preferred) format in order to construct a reference to that identity — doing so manufactures a second form and breaks the equality (§1.8). **With item 1a in force this holds across connections, not only within one:** an identity reference derived at the floor and one read off the wire are the same bytes, so the prohibition and the derivation can no longer disagree. An implementation that derives an identity hash for a path segment and compares an authored identity hash for an equality check is using **one** function, and that is the conformant shape — two functions is the defect item 1a exists to prevent.
@@ -1864,6 +1869,8 @@ The responder MUST also verify `authenticate.peer_id == hello.peer_id` for the s
 
 This table is a **normative MUST-emit contract**: clients key error handling off `result.data.code`, so the code and status for each failure are fixed across implementations (an impl that collapses several of these to one code, or returns a different status, is non-conformant). The three §4.6 proof-of-possession failures are all **401** (the connection handshake is the authentication boundary — §4.6).
 
+**Precedence (0.8.2.1, FM-1).** For connection-handshake failures this table is authoritative for the `(status, code)` pair. §4.6's per-step text is authoritative for *which* failure a given input is; §4.2, §5.2a and §6.12 are cross-references and MUST NOT be read as independent registries. Where an input is named by more than one row of this table, the row citing the §4.6 step is controlling.
+
 | Failure | result.data.code | Status |
 |---------|------------|--------|
 | Incompatible protocol versions | `incompatible_protocol` | 400 |
@@ -1875,9 +1882,11 @@ This table is a **normative MUST-emit contract**: clients key error handling off
 | Absent or invalid authenticate signature (§4.6 step 2) | `authentication_failed` | 401 |
 | `peer_id` not derived from `public_key`, or `hello`/`authenticate` peer_id mismatch (§4.6 step 3) | `identity_mismatch` | 401 |
 | Connection already established | `connection_already_established` | 409 |
-| Out-of-order operation (e.g., authenticate before hello) | `connection_sequence_error` | 400 |
+| Out-of-order operation — e.g. a second `hello` after `hello_done`, or an unknown connect operation. **Not** a pre-hello `authenticate` (see below) | `connection_sequence_error` | 400 |
 
 The responder MUST emit the coded error EXECUTE_RESPONSE before closing the connection on any of the above (§4.6 status boundary). `invalid_signature` (the pre-v7.61 spelling for the step-2 failure) is superseded by `authentication_failed`; impls emitting `invalid_signature` for a connect-auth signature failure should migrate.
+
+An `authenticate` arriving before any hello nonce was issued is **not** the out-of-order row: it is pinned to **401 `invalid_nonce`** by §4.2, §4.6 step 1 and row 6 above. A captured `authenticate` replayed onto a fresh connection is exactly this input, so it is an authentication failure and not a malformed request — the same status the Hardening block pins for a replayed `authenticate` on an established connection. (0.8.2.1, FM-1 — the out-of-order row's example previously named the pre-hello `authenticate`, contradicting §4.6 step 1 and row 6 of this table; §4.2 stated the ordering obligation with no status or code, and this row was the only lexical match for it.)
 
 ### 4.8 Inbound frame processing concurrency
 
@@ -2339,13 +2348,13 @@ The carve-out `unresolvable_grantee` → **401** (§3.6 / §5.5) remains — it 
 
 ### 5.2a Verdict-to-status enumeration (normative, v7.73)
 
-The table below enumerates the request-time surfaces a `verify_request` evaluation can DENY on, with the discriminator `auth-class` (the envelope cannot be authenticated; 401) vs `authz-class` (authenticated but unauthorized; 403). This is the load-bearing extension of the §5.2 mapping — the §3.3 status table remains authoritative for the (status, code) tuple, this enumeration pins which surface routes to which row.
+The table below enumerates the surfaces a `verify_request` evaluation can DENY on, plus the connect-time §4.6 failures, so the auth/authz discriminator is stated once for both boundaries — with the discriminator `auth-class` (the envelope cannot be authenticated; 401) vs `authz-class` (authenticated but unauthorized; 403). This is the load-bearing extension of the §5.2 mapping — the §3.3 status table remains authoritative for the (status, code) tuple, this enumeration pins which surface routes to which row. **§4.7 remains authoritative for the connect-time `(status, code)` pair; the connect-time rows here are a cross-reference** (0.8.2.1, FM-1 — this preamble previously said "request-time" while the table's first three rows are connect-time).
 
 **Discriminator**: a request-time failure is **auth-class (401)** when the EXECUTE itself cannot be authenticated (no/bad author, no/bad/missing signature) — the envelope has no verified signer. It is **authz-class (403)** when the EXECUTE *is* authenticated but the verified signer's capability does not authorize the operation. The `verify_request` AUTHZ_DENY → 403 default applies to authz-class only; the auth-class half belongs to §3.5/§4.6 vocabulary.
 
 | Surface | Failure | Status | Code | Class |
 |---|---|---|---|---|
-| Connect-time (§4.6) | Nonce mismatch | 401 | `invalid_nonce` | auth |
+| Connect-time (§4.6) | Nonce mismatch, nonce absent, or `authenticate` before `hello` | 401 | `invalid_nonce` | auth |
 | Connect-time (§4.6) | Signature invalid against `authenticate.public_key` | 401 | `authentication_failed` | auth |
 | Connect-time (§4.6) | peer_id ↔ public_key binding wrong | 401 | `identity_mismatch` | auth |
 | Request-time (§5.2 step 2) | Author absent | **401** | `authentication_failed` | auth |
@@ -2365,6 +2374,9 @@ The table below enumerates the request-time surfaces a `verify_request` evaluati
 | Request-time (§5.2 step 4) | Capability revoked (core, when `is_revoked` knows) | 403 | `capability_revoked` | authz (v7.72 Class C — preferred-when-known) |
 | Request-time (§5.5) | Capability revoked (ROLE-extension in-flight cascade) | 401 | `capability_revoked` | EXTENSION-ROLE.md §5.5 cascade |
 | Request-time (§6.2) | Scope exceeds authority (`request` op) | 403 | `scope_exceeds_authority` | authz |
+| **Pre-dispatch (§1.4)** | **Inbound EXECUTE targets a non-local namespace** | **400** | **`invalid_request`** | **pre-authz** |
+
+**The pre-dispatch row is not an authorization verdict (0.8.2.2).** It fires at §6.5 step 3 — after the envelope is authenticated, but *before* handler resolution and before `check_permission` — so it is neither auth-class nor authz-class: there is no verdict to map, because the request is refused before authorization is consulted at all. It is enumerated here because this table is where an implementer looks for "which surface emits which (status, code)", and its absence is what let the refusal be reported as `404 handler_not_found` (§6.2) or `403 capability_denied`. Both are non-conformant: the first claims the peer has no such handler, the second claims an authorization decision was made. **A peer MUST NOT substitute either for this row**, and the §6.7 RT-8 masking MAY does not license the 404 here — RT-8 is scoped to an *authorization-denied* dispatch, and this input never reaches authorization.
 
 Conformance: `validate-peer`'s `security` and `authz` categories assert these exact (status, code) tuples; conformance vectors `AUTHZ-DELEGATE-GRANT-1`, `AUTHZ-DENY-DEFAULT-1`, `AUTHZ-SCOPE-EXCEEDS-1`, `AUTHZ-GRANTEE-1`, `AUTHZ-REVOKED-1`, `AUTHZ-NO-CATCHALL-1`, `AUTHZ-EXPIRED-1` and `chain_mid_link_expiry_denied` pin the authz rows; the security category pins the auth rows.
 
@@ -2953,7 +2965,7 @@ Bounds travel with operations through the system.
 | `chain_id` | generated UUID (a single path segment — §3.11) |
 | `visited` | [] |
 
-`ttl` and the continuation `chain_depth` ceiling (recommended **64**, §3.11 / EXTENSION-CONTINUATION §3.9) MUST be **distinct** magnitudes with `chain_depth` ceiling ≤ `ttl` seed, chosen so the deterministic depth brake engages before the TTL backstop under the peer's worst-case sub-dispatch fan-out. **Recommended default ratio: 8×** (seed **512** at the recommended ceiling 64), measured across three impls on the 2026-07-27 three-way run (go/rust/python, `cbx_crosspeer_chain_bounds_globally` cross-peer parity on both pairings). A deployment MAY choose a different ratio to suit its fan-out and stay conformant — per the §4.10 doctrine (informative recommended defaults, not normative constants). **The conformance requirement is the *property*, not the number:** the depth brake, not TTL, is what terminates a runaway chain, and equal magnitudes (both were 64) violate it by letting TTL mask the deterministic brake — the "9-vs-64" cross-peer bound divergence this pins out (0.8.1).
+`ttl` and the continuation `chain_depth` ceiling (recommended **64**, §3.11 / EXTENSION-CONTINUATION §3.9) MUST be **distinct** magnitudes with `chain_depth` ceiling ≤ `ttl` seed, chosen so the deterministic depth brake engages before the TTL backstop under the peer's worst-case sub-dispatch fan-out. **Recommended default ratio: 8×** (seed **512** at the recommended ceiling 64). A deployment MAY choose a different ratio to suit its fan-out and stay conformant — per the §4.10 doctrine (informative recommended defaults, not normative constants). **The conformance requirement is the *property*, not the number:** the depth brake, not TTL, is what terminates a runaway chain, and equal magnitudes (both were 64) violate it by letting TTL mask the deterministic brake — the "9-vs-64" cross-peer bound divergence this pins out (0.8.1).
 
 **Propagation on dispatch**: When a handler issues a derived operation:
 - **TTL decrement (normative, 0.8.1 §4a Ruling 1).** TTL is the resource backstop, decremented **once per *dispatch* (including internal sub-dispatches), never double-counted** — a single dispatch MUST NOT be decremented at ingress *and* again on forward. It is fan-out-sensitive (fires on expensive/fan-out steps) and **orthogonal to `chain_depth`**: one dispatch advances `chain_depth` by at most one causal level but may spend several TTL across its sub-dispatches. Not refilled — the only seed is the initial default, applied once at chain origin, then decremented.
@@ -3059,7 +3071,7 @@ Implementations MUST provide the tree, handlers, connection, **and capability** 
 
 **Capability handler operation status codes.** A capability handler that registers but does not implement an operation MUST return status **501 `unsupported_operation`** for that operation. The three status codes the handler emits are distinct:
 
-- **`404 handler_not_found`** — no handler is registered at the dispatch path. The peer has no notion of the operation at all.
+- **`404 handler_not_found`** — no handler is registered at the dispatch path, **on a path that targets the local peer**. The peer has no notion of the operation at all. *(0.8.2.2 — scope clarification.)* A path targeting a **foreign** namespace is **not** this case: it is refused earlier, at §1.4 canonicalization (§6.5 step 3), with **400 `invalid_request`**, and MUST NOT be reported as `handler_not_found`. The distinction is observable and load-bearing — `404` here asserts *"this peer has no such handler"*, which is false of a peer that has the handler and is refusing the **address**; reporting the refusal as `404` tells a caller to stop asking for a handler that exists.
 - **`501 unsupported_operation`** — a handler IS registered at the path, but does not implement the named operation. The caller's authority is irrelevant; the operation does not exist on this handler.
 - **`403 scope_exceeds_authority`** — a handler is registered and supports the operation, but the caller's authority does not cover the request (or, on `request`, the requested grants exceed the caller's authenticated cap or the matched policy entry).
 
@@ -3250,6 +3262,28 @@ process_registration(request):
 
 **Grant issuance contract (normative).** The grant entity at `system/capability/grants/{pattern}` MUST set `granter` to the local peer's identity hash and MUST be signed by the local peer's keypair (signature over the grant's content hash). `parent` MAY reference the peer's root capability for audit/diagnostic purposes but is not required for validation — handler grants are self-issued; the local peer is the root authority for grants it issues to its own handlers. The `grants` array is built from `requested_scope` (or `internal_scope` when absent) and MAY be empty — a valid scoping indicating the handler has no impure authority. A handler with an empty grant is a pure-functional handler — it runs, but any impure operation (`compute/lookup/tree`, `compute/apply` handler dispatch, `store`) fails its per-op capability check because nothing in the grant covers the target.
 
+**Default self-grant shape (normative, 0.8.2.3).** The `or []` fallback above states what a handler declaring *neither* `requested_scope` nor `internal_scope` receives, and `[]` alone is under-specified: a bootstrap handler that declares no scope still needs to reach its own store to do anything impure, so an implementation that reads `[]` literally produces handlers that cannot function. The default is therefore pinned:
+
+```
+grant_scope = manifest.data.requested_scope
+           or manifest.data.internal_scope
+           or [ { handlers:   {include: ["*"]}
+                , operations: {include: ["*"]}
+                , resources:  {include: ["/*/*"]}
+                                          ; the whole LOCAL store, including the
+                                          ; foreign-namespace regions it holds
+                ; peers: OMITTED — defaults to {include: [local_peer_id]} (§3.6)
+                } ]
+```
+
+**Why `resources` spans namespaces while `peers` does not — read this before narrowing it.** The two dimensions are orthogonal and bound different things (§6.3). A peer's store is **one local address space keyed by peer id** (§1.4): `/{remote_peer_id}/…` names a **local** region holding that peer's cached or mirrored data, and writing there is a local write, **not a remote reach**. §6.3 says so in terms — *"a grant with `peers` absent (defaulting to local peer only) authorizes operations on the local peer, but may include resource paths like `/{remote_peer_id}/data/*` for cached copies."*
+
+So the network bound is carried entirely by **`peers`**, which is omitted here and therefore defaults to `{include: [local_peer_id]}` and **is still checked** (§5.2 Dimension 4). A default-scope handler consequently **cannot** dispatch at a foreign peer, which is the escalation that matters. Narrowing `resources` to `/{local_peer_id}/*` closes **no** hole that `peers` does not already close, and it **breaks a legitimate and common case**: a handler that declares no `internal_scope` and sub-dispatches `system/tree:put` at `/{them}/…` — writing a follow-mirror or caching a foreign content site into its own store. Because the handler grant is the §5.2 Dimension 3 **ceiling** on the in-process sub-dispatch path, narrowing the default narrows that ceiling and returns `403` for those writes.
+
+**`peers: ["*"]` is specifically wrong** and is the one direction that must not be widened — it would authorize sub-dispatch at *foreign peers'* handlers under a grant nobody minted for that purpose, undoing the dimension §5.2 Dimension 4 exists to close.
+
+**This is a default, not a ceiling — for handlers that declare a scope.** A handler that declares `internal_scope` or `requested_scope` gets exactly that, and the default never applies to it. But for a handler that declares **nothing**, this grant **is** its Dimension 3 ceiling on the in-process path, so a change here is a change to what those handlers can reach — not merely to what is written into an unread field. Treat any narrowing of this clause as a cross-impl behavioural change requiring its own measurement, never as a silent-case edit.
+
 Two locations for each handler: the pattern path (canonical `system/handler`, used by dispatch) and `system/handler/{pattern}` (index `system/handler/interface`, used for discovery). The handler entity's `interface` field structurally links the two — resolve the path to navigate from dispatch target to public contract. Handler capability grants are stored at `system/capability/grants/{pattern}`.
 
 **Handler index entries do not participate in handler dispatch.** Dispatch (§6.6) walks the tree from the URI to find `system/handler` entities at canonical pattern paths. Index entries at `system/handler/{pattern}` have type `system/handler/interface` — the type check (`entity.type == "system/handler"`) structurally excludes them from dispatch.
@@ -3438,7 +3472,9 @@ Frame received
       → Invalid. Close connection.
 ```
 
-Connection pre-authorization is the sole dispatch special case. All other inbound requests follow the same path: verify integrity, canonicalize URI path (§1.4), reject if peer ID is not local (§1.4), resolve handler (tree walk), check permission (all four grant dimensions), resolve handler grant, build execution context, dispatch.
+Connection pre-authorization is the sole dispatch special case. All other inbound requests follow the same path: verify integrity, canonicalize URI path (§1.4), reject if peer ID is not local (§1.4 — **400 `invalid_request`**), resolve handler (tree walk), check permission (all four grant dimensions), resolve handler grant, build execution context, dispatch.
+
+**Step 3 is a gate, not an ordering preference (0.8.2.2).** The peer-ID check is step **3 of 8** and precedes handler resolution, so a foreign-namespace URI is refused *as an address* and never becomes an authorization question. Two consequences implementations MUST observe: an implementation MUST NOT reach the same refusal by stripping the foreign peer ID, resolving the local handler at the remaining path, and relying on §5.2 Dimension 4 to deny — that path returns `403`/`404` for what is specified as `400`, and it **allows** the request outright whenever the presented grant happens to carry a matching `peers` scope, which is a foreign-namespace privilege escalation. And because this step guarantees `target_peer == local_peer_id` downstream on the inbound path, Dimension 4's work is done on §1.4's **internal-dispatch** class, not here (§1.4, §3.6).
 
 **Envelope.included signature ingestion (normative, dispatcher-level).** After the included-entity hash validation step in the dispatch chain above (and before handler resolution), implementations MUST ingest signature entities from `envelope.included` and bind them at the invariant pointer paths so subsequent handler validation can find them via tree lookup.
 
@@ -4048,7 +4084,7 @@ Quick reference for the active tier; the full allocation seed table is authorita
 |------|---------|
 | 200 | Success |
 | 207 | Partial success (binding committed, cascade halted) |
-| 400 | Bad request |
+| 400 | Bad request — default `code` `invalid_request` (§3.3 is authoritative for the full 400 code set) |
 | 401 | Authentication failed |
 | 403 | Forbidden |
 | 404 | Not found |
@@ -4139,8 +4175,8 @@ A peer claims a **conformance profile** when it presents itself to a conformance
 - Unknown field preservation (§2.10)
 - Validate total hash byte length matches format code (§1.2)
 - Path validation (§1.4) — no null bytes, no leading slash, no empty segments
-- Dispatch routing (§1.4) — reject EXECUTE targeting non-self peer_id with status 400
-- Connection handler ordering enforcement (§4.2) — hello before authenticate
+- Dispatch routing (§1.4) — reject an inbound EXECUTE targeting a non-self peer_id with **400 `invalid_request`** (0.8.2.2 names the code; the status was already pinned). The refusal runs at canonicalization, **before** handler resolution and before `check_permission` (§6.5 step 3), so it is pre-authorization: it MUST NOT be reported as `404 handler_not_found` (§6.2) or `403 capability_denied`, and MUST NOT be reached by resolving a local handler for the foreign path and letting §5.2 decide. Enumerated in the §5.2a pre-dispatch row; driven by `dispatch_inbound_foreign_namespace_refused`
+- Connection handler ordering enforcement (§4.2) — hello before authenticate; an `authenticate` before a hello nonce was issued emits **401 `invalid_nonce`** (§4.6 step 1, §4.7 row 6), never `connection_sequence_error`
 - Connection uniqueness (§4.2) — reject subsequent connection requests with status 409
 - Connect-time proof-of-possession (§4.6) — nonce-echo (401 `invalid_nonce`), signature verification against `authenticate.public_key` (401 `authentication_failed`), and peer_id↔public_key identity binding (401 `identity_mismatch`); `hello`/`authenticate` peer_id equality on the same connection
 - Auth boundary status (§4.6, §5.2, §8.3) — connect-auth failures emit coded 401 *before* close; request-time `verify_request` DENY maps to 403 (except `unresolvable_grantee` → 401)

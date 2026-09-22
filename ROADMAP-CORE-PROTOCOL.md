@@ -34,8 +34,10 @@ re-derived by 15 languages, not just the three reference impls.
 | `ENTITY-CBOR-ENCODING` | 1.5 | **M6** | 🟢 byte-stable v7.56→v7.77 | ECF — the wire contract (App-E conformance corpus) |
 | `ENTITY-NATIVE-TYPE-SYSTEM` | 4.2.1 | **M6** | 🟢 | core type system + native types |
 | `EXTENSION-TREE` | 4.0.2 | **M6** | 🟢 | **tree get/put = core** (§2); snapshot/diff/merge/extract/view ride along |
-| `ENTITY-CORE-MACHINE-SPEC` | 7.8 (condensed) | **M2** | 🟡 version skew | implementation reference; "travels with" the protocol |
 | core `test-vectors/` | — | **M6** | 🟢 | ECF + crypto-agility corpora (vendored to keystone) |
+
+~~`ENTITY-CORE-MACHINE-SPEC`~~ — **RETIRED 2026-08-31**, archived to `docs/archive/` and undeclared
+from `CANONICAL-DOCS.toml`. **G3 is closed as *retire*, not *make current*.**
 
 ## Stages / phases
 
@@ -49,8 +51,13 @@ verdict-determinism errata) all landed and re-converged. The protocol is feature
 - **Naming normalization** — folded on the V7 line as v7.77 (kebab namespaces / snake keys).
 - **v7 → V8 cutover** — Genesis `v0.8.0` is the release marker; behaviorally a near-no-op
   (the naming work is already folded). *Forward item:* author the v7→v8 conversion doc (gap #7).
-- **MACHINE-SPEC version skew** — the condensed impl spec reads 7.8 against PROTOCOL 7.77;
-  current-or-retire decision pending (gap G3).
+- **MACHINE-SPEC — RESOLVED 2026-08-31: retired** (gap G3 closed). The skew was never going to be
+  paid down: a hand-maintained condensation of a specification ages on every edit to the source, and
+  **nothing gates spec-against-spec**, so the drift is only reachable by a human reading both
+  documents side by side. Retirement had been decided **2026-08-02** and its one precondition —
+  relocating §1.8 to `ENTITY-CBOR-ENCODING` §5.4 — was met **2026-08-10**; the retirement itself then
+  sat undone for four weeks and cost a fold (FM-1 found §6.4 and §6.2 both wrong). Archived to
+  `docs/archive/` with a retirement banner, undeclared from `CANONICAL-DOCS.toml`.
 
 **Stage — Hardening program (forward, post-release, proposal-first).** The substrate is
 correctness-complete; the open frontier is non-functional (resilience, security-under-load,

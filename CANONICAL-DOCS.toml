@@ -46,24 +46,28 @@ blurb = "This specification defines the entity-native type system for the Entity
 group = "Protocol specs"
 
 # ── Reference ─────────────────────────────────────────────────────────────────
-[[doc]]
-path  = "specs/ENTITY-CORE-MACHINE-SPEC.md"
-title = "Entity Core Protocol — Implementation Specification"
-blurb = "Entity := { type: string, data: any, contenthash: bytes }"
-group = "Reference"
+# `specs/ENTITY-CORE-MACHINE-SPEC.md` was declared here until 2026-08-31. **RETIRED** and moved to
+# `docs/archive/`. It was a *derived* document (SPECIFICATION-FORMAT §8.4.3) restating the real
+# specs; it drifted unchecked from 0.8.0 because nothing gates spec-against-spec, and was found
+# 2-for-2 wrong in the only two sections ever examined. Nothing generates from it — keystone vendors
+# PROTOCOL/CBOR/TYPE-SYSTEM and never vendored this. **Do not re-declare it.**
+# §1.8 now lives at ENTITY-CBOR-ENCODING §5.4; §6.4 was always ENTITY-CORE-PROTOCOL §4.7.
 
 # ── Authoring standards ───────────────────────────────────────────────────────
-[[doc]]
-path  = "specs/SPECIFICATION-FORMAT.md"
-title = "Entity System — Normative Specification Format"
-blurb = "This document defines the format for normative specifications in the entity system."
-group = "Authoring standards"
-
-[[doc]]
-path  = "specs/STYLE-NAMING-CONVENTIONS.md"
-title = "Entity System — Identifier Naming Conventions"
-blurb = "These names are part of the wire contract."
-group = "Authoring standards"
+# `specs/SPECIFICATION-FORMAT.md` and `specs/STYLE-NAMING-CONVENTIONS.md` were declared here until
+# 2026-08-31. **Both are now single-homed in `entity-system-architecture/specs/`**, which is where
+# they are authored: arch carried 8 commits against SPECIFICATION-FORMAT to this repo's 1 (the
+# release-cut import), and the copy here had **zero unique lines** against arch's 137.
+#
+# They are AUTHORING standards — how a normative spec document is written — not wire contract, so
+# the reader who needs them is a spec author, not an implementer of this protocol. Specs here cite
+# them by document NAME, never as a path, the same way ecosystem ADRs are cited.
+#
+# **Do not re-declare them, and do not restore a copy.** Two copies of one standard is the defect
+# this removes, and STYLE-NAMING is the proof: it had forked in BOTH directions inside one release
+# cycle. The copy here carried a dead `tools/spec-style` path and a standing "corpus is gate-clean
+# / 0 violations" build-state claim; arch's carried an impl-team reference. Neither was a superset
+# of the other, so there was no clean side to sync from. An un-gated duplicate diverges.
 
 # ── Roadmap ───────────────────────────────────────────────────────────────────
 [[doc]]

@@ -457,13 +457,13 @@ hash-bytes = bytes                            ; format-code + digest; LENGTH DET
 - `included` keys: CBOR byte strings (same format as content_hash)
 - See §4.5 for hash wire encoding specification
 
-> **Corrected 2026-08-10 — this block restated §4.5 as "33 bytes" and thereby contradicted it.** §4.5 has always been correct (`digest = *OCTET ; length determined by format`); the restatement froze one registry entry's width into the **wire-format section, which is where implementers read it.** A stale in-document restatement is the same hazard as a derived document restating a spec (`SPECIFICATION-FORMAT.md` §8.4.3): it looks authoritative and gets read instead of the source. **This is the root instance of the width-lock class** now barred corpus-wide by `SPECIFICATION-FORMAT.md` §8.4.5 — the extension-layer instances (NETWORK §6.5.3.1, SIGNALING §6.3, RELAY §3.1/§5, TREE §3.2, REGISTRY §5.1) all restate this shape. **The normative rule at §4.5 is unchanged**; this aligns the restatement with it, so it is a correction, not a wire change.
+> **Digest width is never restated here.** §4.5 is authoritative (`digest = *OCTET ; length determined by format`), and any width above is illustrative of a specific registry entry, never a constraint. Freezing one entry's width into the wire-format section — which is where implementers read — produces a restatement that looks authoritative and gets read instead of the source. Barred corpus-wide by `SPECIFICATION-FORMAT` §8.4.5 (`entity-system-architecture`).
 
 ---
 
 ## 5.4 Entity Fidelity
 
-> **Relocated verbatim from `ENTITY-CORE-MACHINE-SPEC.md` §1.8 on 2026-08-10, and this is now its canonical home.** The machine-spec is a **derived** document (`SPECIFICATION-FORMAT.md` §8.4.3) scheduled for retirement, but §1.8 is **not** derived content — it is the receive/forward byte-preservation contract, one of the five load-bearing invariants, cited by name in two implementations' conformance validators. It is moved here first, and separately, because **deleting the machine-spec before relocating it would orphan a normative contract that live code depends on.** Its own conformance already routed to this document's Appendix E, which is why this is the home. Citations of `ENTITY-CORE-MACHINE-SPEC.md §1.8` remain resolvable until the cohort repoints them; **the machine-spec MUST NOT be deleted until they are.**
+> **This section is the canonical home of the entity-fidelity contract**, and its conformance routes to Appendix E of this document. It is the receive/forward byte-preservation rule — one of the five load-bearing invariants — and an implementation or validator citing any older location should cite **`ENTITY-CBOR-ENCODING.md` §5.4**.
 
 1. Validate hash on receipt (compute from {type, data}, compare)
 2. Trust validated hash thereafter — MUST NOT recompute
@@ -523,7 +523,7 @@ Entity Core protocol messages MUST NOT use CBOR tags on data fields, and conform
 
 **Internal divergence (informative).** An implementation whose internal architecture uses tags for legitimate reasons (an in-network extension, a custom representation, a vendor-specific use case) is conformant at the boundary as long as it strips tags before egress to other peers and conforms to the canonical ECF contract on the wire. The boundary is where conformance is required; internal architecture is the implementer's choice. See `ENTITY-CORE-PROTOCOL.md` §1.11 ("Boundary Conformance and Internal Divergence") for the general principle.
 
-**Forward-compatibility for tags.** If a future ECF feature ever requires CBOR tags, the spec amends this section to whitelist the specific tags with their canonical form and conformance vectors. The current MUST-reject is universal; future tag-using features come via deliberate spec amendment, *not* via silent preservation. (This is a different layer from `ENTITY-CORE-MACHINE-SPEC.md §1.8` step 5, which addresses unknown *map-key fields* — field-level forward-compat — rather than unknown CBOR major types.)
+**Forward-compatibility for tags.** If a future ECF feature ever requires CBOR tags, the spec amends this section to whitelist the specific tags with their canonical form and conformance vectors. The current MUST-reject is universal; future tag-using features come via deliberate spec amendment, *not* via silent preservation. (This is a different layer from §5.4 step 5, which addresses unknown *map-key fields* — field-level forward-compat — rather than unknown CBOR major types.)
 
 Conformance test vectors for tag rejection live in `Appendix E` under the `tag_reject` category.
 
@@ -1330,7 +1330,7 @@ Initial total: ~120–140 vectors (final count locked at v1 cross-bless).
 
 ### E.2 Fixture format
 
-The normative fixture is `conformance-vectors-v{N}.cbor` — a canonical-ECF-encoded CBOR array of vector maps. Each vector map:
+The normative fixture is `conformance-vectors.cbor` — a canonical-ECF-encoded CBOR array of vector maps. Each vector map:
 
 ```cddl
 vector = {
@@ -1347,15 +1347,15 @@ The `canonical` field carries dual semantics by `kind`:
 - **`encode_equal`** — the canonical output the encoder MUST produce when given `input`.
 - **`decode_reject`** — the wire-bytes input the decoder MUST reject (typically with `400 non_canonical_ecf` for tag-policy violations; specific error codes per category as documented).
 
-Human-editable source: `conformance-vectors-v{N}.diag` (CBOR diagnostic notation, RFC 8949 §8). Non-normative; a build script generates the binary `.cbor` from the `.diag` source.
+Human-editable source: `conformance-vectors.diag` (CBOR diagnostic notation, RFC 8949 §8). Non-normative; a build script generates the binary `.cbor` from the `.diag` source.
 
-**Canonical fixture location** (in-tree): `test-vectors/ecf-conformance/conformance-vectors-v1.cbor` (+ `.diag`).
+**Canonical fixture location** (in-tree): `test-vectors/ecf-conformance/conformance-vectors.cbor` (+ `.diag`). The corpus is identified by its **directory name and the artifact's sha256**; it carries no version stamp, and its history lives in `CHANGELOG.md` beside it (0.8.2.1 — the artifacts previously carried a `-v1` stem that was never incremented across a 69 → 71 vector change).
 
 ### E.3 Conformance harness
 
 Each implementation runs:
 
-1. Load `conformance-vectors-v{N}.cbor` via the impl's CBOR decoder. (A decoder bug here is itself a conformance failure — the harness exercises the decoder before any vector test.)
+1. Load `conformance-vectors.cbor` via the impl's CBOR decoder. (A decoder bug here is itself a conformance failure — the harness exercises the decoder before any vector test.)
 2. For each vector, branch on `kind`:
    - **`encode_equal`** — encode `input` via the impl's canonical ECF encoder; compare bit-for-bit with `canonical`; pass iff byte-identical.
    - **`decode_reject`** — feed `canonical` (wire bytes) to the impl's decoder; pass iff the decoder rejects with the expected error code.
@@ -1385,6 +1385,8 @@ The cross-impl conformance loop, including the validate-peer-driven harness and 
 
 ### E.6 Compliance reporting
 
-Conformance reports MUST cite the version of `conformance-vectors-v{N}.cbor` that the implementation passes. A report of "passes v1" means every vector in `conformance-vectors-v1.cbor` (the set committed to the canonical fixture location at version v1) returns pass under §E.3 semantics.
+Conformance reports MUST cite the **corpus name and the sha256 of the `conformance-vectors.cbor` artifact** the implementation passes — the citation form is `(spec-version, corpus-name, artifact sha256)`. A report means every vector in the artifact with that digest returns pass under §E.3 semantics.
 
-Implementations choosing the `ENTITY-CORE-MACHINE-SPEC.md §1.8` lossless-parse+canonical-re-encode mechanism MUST additionally verify that round-tripping each `encode_equal` vector's `canonical` bytes through their decoder and re-encoder produces byte-identical output (the §1.8 clause (a) precondition).
+The sha256 is the exact identifier: it cannot be forgotten, it is what the corpus gates already check, and it is already how vendors pin. **A vendored copy is verified by digest, never by filename** — a filename match across trees is not evidence the bytes agree, and a filename *mismatch* makes an automated vendor check report *could-not-look* rather than a failure. (0.8.2.1 — this rule previously required citing a corpus *version*, a stamp that was never incremented across a 69 → 71 vector change and is now retired corpus-wide; corpus history lives in the `CHANGELOG.md` beside the artifact.)
+
+Implementations choosing the §5.4 lossless-parse+canonical-re-encode mechanism MUST additionally verify that round-tripping each `encode_equal` vector's `canonical` bytes through their decoder and re-encoder produces byte-identical output (the §5.4 clause (a) precondition).

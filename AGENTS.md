@@ -27,15 +27,30 @@ The normative texts live in `specs/`. Start with `ENTITY-CORE-PROTOCOL.md`.
 | `ENTITY-CORE-PROTOCOL.md` | the protocol — Layers 0–4; the universal-address-space / tree model |
 | `ENTITY-CBOR-ENCODING.md` | the Entity Canonical Form (ECF) wire contract + conformance corpus |
 | `ENTITY-NATIVE-TYPE-SYSTEM.md` | the core type system and native types |
-| `ENTITY-CORE-MACHINE-SPEC.md` | condensed implementation reference (travels with the protocol) |
-| `SPECIFICATION-FORMAT.md` | the normative-spec authoring format (how specs here are written) |
-| `STYLE-NAMING-CONVENTIONS.md` | identifier naming — these names are part of the wire contract |
 | `test-vectors/` | ECF + crypto-agility conformance corpora (`.diag` source, `.cbor` canonical) |
+
+**The two authoring standards are NOT in this repo.** `SPECIFICATION-FORMAT` (how a normative spec
+document is written) and `STYLE-NAMING-CONVENTIONS` (identifier naming — these names are part of the
+wire contract) are **single-homed in `entity-system-architecture/specs/`** as of 2026-08-31. Read them
+there; cite them by document **name**, never as a path. **Do not restore a copy here.** The duplicate
+is what went wrong: SPECIFICATION-FORMAT's copy here was a strict stale subset — zero unique lines,
+missing all of §8.4.1–§8.4.6 — which is why three *correct* citations reported `stale-section`, and
+STYLE-NAMING's had forked in **both** directions, so neither side was a superset and there was no clean
+one to sync from.
+
+**`ENTITY-CORE-MACHINE-SPEC.md` is RETIRED (2026-08-31)** — archived to `docs/archive/`, undeclared
+from `CANONICAL-DOCS.toml`. **Do not resurrect it, do not re-declare it, and do not author a new
+"condensed" or "implementation" edition of any spec here.** That is the defect, not the remedy: a
+hand-maintained restatement ages on every edit to its source, **nothing in the toolkit gates
+spec-against-spec**, and the drift is reachable only by a human reading both documents side by side.
+Retirement was decided 2026-08-02 and not executed until it had cost a fold — FM-1 found its §6.4
+missing the `invalid_nonce` row entirely and its §6.2 still carrying a blanket `403` the real spec
+corrected two releases earlier. `SPECIFICATION-FORMAT` §8.4.3 already names the class.
 
 - Each spec carries its **own authoritative version header** (`**Version**:`); the per-doc
   header is the source of truth for that document, not the release tag. (As of this writing:
-  PROTOCOL/MACHINE-SPEC 0.8.0, CBOR-ENCODING 1.5, TYPE-SYSTEM 4.2.1, SPECIFICATION-FORMAT 1.1,
-  STYLE-NAMING 1.0.)
+  PROTOCOL 0.8.2.1, CBOR-ENCODING 1.5, TYPE-SYSTEM 4.2.1. The two authoring standards
+  carry their own headers in `entity-system-architecture`.)
 - Maturity, the per-artifact source-of-record, and the M0–M6 ladder are tracked in
   `ROADMAP-CORE-PROTOCOL.md` (canonical, living for this domain), which defers the
   cross-domain release-surface map to `STATUS-RELEASE-SURFACE-AND-MATURITY-CANONICAL.md`
@@ -80,8 +95,8 @@ and AGENTS-STANDARD §"Respect the protocol".
   identity / capability / dispatch / tree) is feature-complete for v1 and **closed** — the
   open frontier is non-functional hardening (resilience, security-under-load, perf shape),
   and it too is proposal-first (`ROADMAP-CORE-PROTOCOL.md` §"Hardening program").
-- **Identifiers are part of the wire contract** — `STYLE-NAMING-CONVENTIONS.md` is binding,
-  not cosmetic.
+- **Identifiers are part of the wire contract** — `STYLE-NAMING-CONVENTIONS` is binding,
+  not cosmetic. It is authored in `entity-system-architecture`; cite it by name.
 
 ## Boundaries — stay in your lane
 
@@ -96,9 +111,10 @@ and AGENTS-STANDARD §"Respect the protocol".
 - **Dual-license, by surface** ([ADR-0007]): prose is **CC-BY-ND-4.0** (no-derivatives — the
   reason changes come as proposals, not forks); schemas / IDL / test-vectors are **Apache-2.0**.
   Keep new material on the right side of that line.
-- **Cross-domain references are pointers, not local files.** `STATUS-RELEASE-...-CANONICAL.md`
-  and `EXTENSION-TREE` are authored in `entity-system-architecture`; cite them as such and
-  don't fabricate local copies.
+- **Cross-domain references are pointers, not local files.** `STATUS-RELEASE-...-CANONICAL.md`,
+  `EXTENSION-TREE`, **`SPECIFICATION-FORMAT` and `STYLE-NAMING-CONVENTIONS`** are authored in
+  `entity-system-architecture`; cite them as such and don't fabricate local copies. The last two
+  were local copies until 2026-08-31 and both had drifted — that is the whole reason for this rule.
 
 ## Repo layout (root)
 

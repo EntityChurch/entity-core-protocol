@@ -7,7 +7,111 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
-*(Nothing yet. Post-release work lands here.)*
+### Fixed — the default handler grant spans the whole local store, not just the peer's own prefix (0.8.2.3)
+
+`0.8.2.2` pinned the default per-handler self-grant's `resources` to `["/{local_peer_id}/*"]`, reasoning
+that a bootstrap grant should reach only its own peer. **That was wrong, and it would have broken a
+common case.**
+
+A peer's store is one local address space keyed by peer id: `/{remote_peer_id}/…` names a **local**
+region holding that peer's cached or mirrored data, so writing there is a local write and not a remote
+reach. §6.3 already said this in terms — *"a grant with `peers` absent … may include resource paths like
+`/{remote_peer_id}/data/*` for cached copies."* The network bound is carried entirely by the `peers`
+dimension, which this grant omits and which therefore defaults to the local peer and is still checked.
+
+Narrowing `resources` closed no hole that `peers` did not already close, and it broke handlers that
+declare no scope and write a follow-mirror or a cached foreign site into their own store: because the
+handler grant is the Dimension 3 ceiling on the in-process sub-dispatch path, those writes returned
+`403`. The default is now `["/*/*"]` — the whole local store — and §6.2 states the reasoning so the
+narrower reading is not re-derived.
+
+The `peers`-omitted half of `0.8.2.2` stands unchanged, and it is the half that carries the security
+property.
+
+### Fixed — a foreign-namespace request had a MUST with no code anyone could find (0.8.2.2)
+
+§1.4 has always required a peer to reject an inbound EXECUTE naming another peer's namespace, with
+status **400 `invalid_request`**. But `invalid_request` appeared **exactly once in the entire
+specification — inside that MUST itself**. It was not in §3.3's status vocabulary, not in §8.3's
+status table, not in §5.2a's verdict enumeration, not in §9.1's conformance list, and no conformance
+check read it. Meanwhile §6.2 defined `404 handler_not_found` as *"no handler is registered at the
+dispatch path"* — a description a foreign-namespace path satisfies on its face.
+
+So an implementer reading §1.4 met a code used nowhere else in the document, and an implementer
+reading §6.2 met a code whose definition fit. They picked the one the specification explained.
+**This was not a divergence from a clear rule; the rule had nowhere for the agreement to live.**
+
+`invalid_request` is now declared in §3.3 and §8.3, enumerated as a pre-dispatch row in §5.2a, named
+in §6.5's dispatch chain and in §9.1's conformance list, and `handler_not_found`'s definition in §6.2
+is scoped so it can no longer absorb this input. §1.4 and §3.6 additionally state **where the `peers`
+capability dimension is evaluated** — it is unreachable on the inbound path by construction and does
+its work on internal sub-dispatch, a distinction whose absence had led to the reasonable-but-wrong
+conclusion that the dimension was inert.
+
+Also pinned: the **default per-handler self-grant**. §6.2's `or []` fallback was under-specified — a
+handler that declares no scope still needs its own namespace to do anything impure — so the default is
+now `resources: ["/{local_peer_id}/*"]` with `peers` omitted. **This is a default, not a ceiling:** a
+handler needing broader authority declares it, and the declaration is what the grant is built from.
+
+Version header moves `0.8.2.1` → **`0.8.2.2`**.
+
+### Fixed — a pre-hello `authenticate` had two answers in one table (0.8.2.1)
+
+`ENTITY-CORE-PROTOCOL` §4.7 answered one input twice: row 6 pinned an `authenticate` arriving before
+any hello nonce to **401 `invalid_nonce`**, while row 10's parenthetical claimed the same input as an
+out-of-order operation at **400 `connection_sequence_error`**. Two readings, each defensible from the
+text, mutually non-conformant — so *"follow §4.7"* was not a well-defined position.
+
+**Ruled 401 `invalid_nonce`**: a captured `authenticate` replayed onto a fresh connection is exactly
+this input, so it is an authentication failure and not a malformed request — the same status already
+pinned for a replayed `authenticate` on an established connection. Row 10's example was narrowed, §4.2's
+ordering MUST was given the status and code it had always lacked, §5.2a's connect-time rows were
+completed, the precedence order between §4.6, §4.7 and §9.1 is now stated once, and §9.1's conformance
+list names the status.
+
+Version header moves `0.8.2` → **`0.8.2.1`**.
+
+### Changed — the ECF conformance corpus is de-versioned
+
+`conformance-vectors-v1.{cbor,diag}` → **`conformance-vectors.{cbor,diag}`**. A corpus is identified by
+its name and its artifact's sha256, never by a version stamp in its filename; the stamp was a second
+identity that could disagree with the bytes.
+
+The 0.8.2 entry below records that the `-v1` stamp was deliberately kept, because Appendix E of
+`ENTITY-CBOR-ENCODING` stated the corpus-version citation rule normatively and no proposal covered
+retiring it. **That amendment has now landed** — Appendix E's five citation sites were rewritten, and
+§E.6's MUST no longer demands a citation form that no longer exists.
+
+**The artifact is byte-identical across the rename** — sha256
+`9695b1f1d939cfdfdd4297f8ad32122d424b1ec180cfae74c92d509d88f7c6dc`, 71 vectors. Anyone vendoring this
+corpus should **verify by digest, never by filename**: a rename does not merely make a vendored copy
+stale, it makes a filename-matching vendor check unable to look at all, and that reports as a warning
+rather than as a failure.
+
+### Removed — `ENTITY-CORE-MACHINE-SPEC`
+
+Retired. It was a *derived* document — a hand-maintained condensed restatement of the three real specs —
+and it had drifted unchecked from 0.8.0 while carrying a canonical declaration. When two of its sections
+were finally examined, both were wrong: one was missing an error row entirely, the other still carried a
+blanket `403` the real spec had corrected two releases earlier.
+
+A derived document is not repaid by re-synchronizing it. The maintenance burden is unbounded, nothing
+mechanically checks one spec against another, and the drift is reachable only by a human reading both
+documents side by side. **No replacement is planned, and a new "condensed" or "implementation" edition
+of any spec here would be the same defect.** Its §1.8 content lives at `ENTITY-CBOR-ENCODING` §5.4; its
+error table was always `ENTITY-CORE-PROTOCOL` §4.7.
+
+### Removed — the two authoring standards are no longer duplicated here
+
+`SPECIFICATION-FORMAT` and `STYLE-NAMING-CONVENTIONS` are now **single-homed in
+`entity-system-architecture`**, where they are authored. They are authoring standards — how a normative
+spec document is written — so the reader who needs them is a spec author rather than an implementer of
+this protocol. Specs here cite them by document name.
+
+Both copies had drifted, in opposite directions, which is why they were consolidated rather than
+re-synchronized: this repo's `SPECIFICATION-FORMAT` was a strict stale subset missing an entire
+subsection family, and its `STYLE-NAMING-CONVENTIONS` had forked **both** ways, so neither side was a
+superset and there was no clean one to sync from.
 
 ---
 
