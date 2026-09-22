@@ -90,6 +90,14 @@ and AGENTS-STANDARD §"Respect the protocol".
 - **The conformance corpus, not the version number, is the contract.** A change is not
   ratified on argument alone; it is demonstrated against the vectors. Core-protocol changes
   are held to the strictest bar — a core change forces every implementation to follow.
+- ⛔ **The per-document `**Version**:` header moves whenever that document's obligations do, and
+  nothing exempts it.** `SPECIFICATION-FORMAT` §9.1/§9.2 (authored in `entity-system-architecture`,
+  binding here) is the authority and the bump ladder — including the **Correction** arm, which is
+  where an impl finding fixed in place lands. A `Spec-Change:` trailer exempts a **commit** from the
+  **proposal** obligation; it has never exempted the header. **The corpus is the contract and the
+  header is the claim about this document's content; a consumer needs both to be true.** On
+  `0.8.2.25 → .26` two of three documents changed normative content while neither surface moved —
+  found by a seat outside this repo, not by us.
 - **The wire core is locked.** It is never renumbered; unknowns are MUST-ignore. Honor the
   **stability tiers** ([ADR-0004], per AGENTS-STANDARD). The substrate (wire / type /
   identity / capability / dispatch / tree) is feature-complete for v1 and **closed** — the

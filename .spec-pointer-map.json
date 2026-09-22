@@ -1,0 +1,142 @@
+{
+  "meta": {
+    "pins": 27
+  },
+  "pins": {
+    "specs/ENTITY-CBOR-ENCODING.md::ENTITY-CORE-PROTOCOL\u00a71.11": {
+      "digest": "sha256:581763d6f87f8031caef77fcaeb6fe17",
+      "doc": "ENTITY-CORE-PROTOCOL",
+      "section": "1.11"
+    },
+    "specs/ENTITY-CBOR-ENCODING.md::ENTITY-CORE-PROTOCOL\u00a71.2": {
+      "digest": "sha256:200ed4ff9bd7a6d0d00665b19ccbbd3f",
+      "doc": "ENTITY-CORE-PROTOCOL",
+      "section": "1.2"
+    },
+    "specs/ENTITY-CBOR-ENCODING.md::ENTITY-CORE-PROTOCOL\u00a71.3": {
+      "digest": "sha256:ecd0ce677b35407de76e3bd366929980",
+      "doc": "ENTITY-CORE-PROTOCOL",
+      "section": "1.3"
+    },
+    "specs/ENTITY-CBOR-ENCODING.md::ENTITY-CORE-PROTOCOL\u00a77.3": {
+      "digest": "sha256:f368b475d3e3a02654349427d3c76611",
+      "doc": "ENTITY-CORE-PROTOCOL",
+      "section": "7.3"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a71.8": {
+      "digest": "sha256:e668ca113e055cf4c867855bb602b741",
+      "doc": null,
+      "section": "1.8"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a73.1": {
+      "digest": "sha256:eb96b2b33b7c9e1fc9adf076e942faf1",
+      "doc": null,
+      "section": "3.1"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a73.3": {
+      "digest": "sha256:6f0550819fbc5cbdd53b371c28be5267",
+      "doc": null,
+      "section": "3.3"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a73.5": {
+      "digest": "sha256:2651466c11077d4245ae29422bc6ea7e",
+      "doc": null,
+      "section": "3.5"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.10": {
+      "digest": "sha256:672acbef3b65d5c3747accfe03465c8e",
+      "doc": null,
+      "section": "4.10"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.11": {
+      "digest": "sha256:17e60623a82c7383450bd813e7a4e1df",
+      "doc": null,
+      "section": "4.11"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.2": {
+      "digest": "sha256:f377c34267142ac9dcb6e0030c42b9b3",
+      "doc": null,
+      "section": "4.2"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.5": {
+      "digest": "sha256:d6b6148e27f7d1b89029c06c4d006faf",
+      "doc": null,
+      "section": "4.5"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.6": {
+      "digest": "sha256:42dfc4e7dc1cfc963129cc8c4a2009b5",
+      "doc": null,
+      "section": "4.6"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.7": {
+      "digest": "sha256:6b4f596f263f72b5839af9be245eb2e0",
+      "doc": null,
+      "section": "4.7"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.8": {
+      "digest": "sha256:bb92d18d76a68a08bd948793efe08829",
+      "doc": null,
+      "section": "4.8"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a74.9": {
+      "digest": "sha256:25cd00c7aadb93867798f6ac4d5cda7b",
+      "doc": null,
+      "section": "4.9"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a75.2": {
+      "digest": "sha256:335ddaf343904abfd03b89aeae4ec84b",
+      "doc": null,
+      "section": "5.2"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a75.2a": {
+      "digest": "sha256:37b6cea6018a6be92636887acdd5754c",
+      "doc": null,
+      "section": "5.2a"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a75.4": {
+      "digest": "sha256:7ed42a07d28e66f374f11e0b50b7c65c",
+      "doc": null,
+      "section": "5.4"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a76.10": {
+      "digest": "sha256:b2434c0e546a8504c6271be98e9085e5",
+      "doc": null,
+      "section": "6.10"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a76.13": {
+      "digest": "sha256:706c3bb34c57c599d98072d7cc141aeb",
+      "doc": null,
+      "section": "6.13"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a76.2": {
+      "digest": "sha256:0602c0c9c2ccb970b8cd068ccc5c53c5",
+      "doc": null,
+      "section": "6.2"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a76.3": {
+      "digest": "sha256:6d0dbfdd731f18864c45ca08c343dbe7",
+      "doc": null,
+      "section": "6.3"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a76.8": {
+      "digest": "sha256:17902625b00d91542c35a85fd9344ea3",
+      "doc": null,
+      "section": "6.8"
+    },
+    "specs/ENTITY-CORE-PROTOCOL.md::\u00a76.9a": {
+      "digest": "sha256:76d80b27b00cacf767661a9976422b25",
+      "doc": null,
+      "section": "6.9a"
+    },
+    "specs/ENTITY-NATIVE-TYPE-SYSTEM.md::ENTITY-CORE-PROTOCOL\u00a73.5": {
+      "digest": "sha256:2651466c11077d4245ae29422bc6ea7e",
+      "doc": "ENTITY-CORE-PROTOCOL",
+      "section": "3.5"
+    },
+    "specs/ENTITY-NATIVE-TYPE-SYSTEM.md::ENTITY-CORE-PROTOCOL\u00a77.3": {
+      "digest": "sha256:f368b475d3e3a02654349427d3c76611",
+      "doc": "ENTITY-CORE-PROTOCOL",
+      "section": "7.3"
+    }
+  }
+}

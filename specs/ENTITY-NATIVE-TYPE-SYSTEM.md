@@ -1,6 +1,6 @@
 # Entity-Native Type System Specification
 
-**Version**: 4.2.1
+**Version**: 4.3
 
 **Status**: Active
 **Depends:** ENTITY-CORE-PROTOCOL.md
@@ -416,7 +416,7 @@ The complete set of 14 bootstrap types:
 | 14 | `system/peer-id` | Peer identity (Base58-encoded) |
 | — | `entity` | Structural root type (`{type, data}`); content_hash derived per ECF. **Primordial — not one of the 14 numbered bootstrap types:** bare `entity` precedes the namespacing entirely and co-arises with the type system (§2.7.1, §3.1.1), so it is bootstrapped *with* the type machinery rather than counted among the namespaced bootstrap types. |
 
-Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup. Bare `entity` (the un-numbered primordial row above) is likewise recognized without tree lookup, but as the co-arising structural root (§3.1.1), not as one of the 14 namespaced bootstrap types — which is why the count is 14, not 15. The `system/peer.peer_id` references at §10.1 / Appendix B resolve to the canonical core type **`system/peer-id`**, which is a **core protocol primitive** — it is used in the connect handshake before any extension loads and is **not** an identity-extension type, so it does not live under the `system/identity/` namespace (0.8.1, F37).
+Implementations MUST treat these 14 types as built-in. They MUST be recognized without tree lookup and MUST be populated in the entity tree at startup. Bare `entity` (the un-numbered primordial row above) is likewise recognized without tree lookup, but as the co-arising structural root (§3.1.1), not as one of the 14 namespaced bootstrap types — which is why the count is 14, not 15. Every `peer_id`-typed field in this document resolves to the canonical core type **`system/peer-id`**, which is a **core protocol primitive** — it is used in the connect handshake before any extension loads and is **not** an identity-extension type, so it does not live under the `system/identity/` namespace (0.8.1, F37). *(0.8.2.29 — this sentence named `system/peer.peer_id` at §10.1 / Appendix B as its examples. That field does not exist and MUST NOT: see §10.1. The type is unaffected and is still carried by the connect `authenticate` entity, `system/connection` and the `system/peer/status` family, which are its live holders.)*
 
 ### 4.5 system/hash
 
@@ -1457,7 +1457,6 @@ Represents a peer's cryptographic identity. (Renamed from `system/identity` in v
   "data": {
     "name": "system/peer",
     "fields": {
-      "peer_id":    {"type_ref": "system/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"}
     }
@@ -1467,9 +1466,10 @@ Represents a peer's cryptographic identity. (Renamed from `system/identity` in v
 
 | Field | Description |
 |-------|-------------|
-| `peer_id` | Base58-encoded peer identifier (derived from public key) |
 | `public_key` | Raw public key bytes (32 bytes for Ed25519) |
 | `key_type` | Key algorithm (e.g., `"ed25519"`). See ENTITY-CORE-PROTOCOL.md §1.5 for identity model. |
+
+**`peer_id` is NOT a field on this type `[MUST]` (0.8.2.29).** `ENTITY-CORE-PROTOCOL.md` §3.5 is the normative home and forbids `peer_id` in this entity's hashable basis. A content hash is taken over the whole canonical encoding of `{type, data}`, so a field in `data` **is** in the hashable basis: *not hashable* and *not a field* are one statement here, and there is no shape in which the entity carries the value without hashing it. The peer-id is recovered from `(public_key, key_type)` by the §1.5 / §7.4 construction, so carrying it would be redundant as well as non-conformant. A peer authoring the three-field shape computes a different `content_hash` for one identity, which breaks the `ENTITY-CORE-PROTOCOL.md` §5.2 `signer == author` / `grantee == author` byte equalities at connect; a receiver *validating* against the three-field shape rejects every conformant identity entity. *(0.8.2.29 — this declaration carried the pre-v7.65 shape. `0.8.2.15` corrected the same rule at `ENTITY-CORE-PROTOCOL.md` §4.5a item 1a and §4.6's `peer_entity` pseudocode and swept no further, so this declaration, its Appendix B twin and three prose sites in the core document kept the retired shape — and a type declaration is precisely the home a type-validating implementation reads.)*
 
 ### 10.2 system/signature
 
@@ -2398,12 +2398,13 @@ Complete protocol and supporting type definitions in CBOR diagnostic notation. T
 ; --- Supporting Types ---
 
 ; system/peer
+; peer_id is NOT a field here (§10.1, ENTITY-CORE-PROTOCOL.md §3.5): data is the
+; hashable basis, and peer_id is derived from (public_key, key_type) via §1.5/§7.4.
 {
   "type": "system/type",
   "data": {
     "name": "system/peer",
     "fields": {
-      "peer_id":    {"type_ref": "system/peer-id"},
       "public_key": {"type_ref": "primitive/bytes"},
       "key_type":   {"type_ref": "primitive/string"}
     }
