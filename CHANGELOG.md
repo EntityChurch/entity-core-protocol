@@ -7,6 +7,248 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Fixed — the conformance floor's restating rows did not name their authorities (0.8.2.32)
+
+`0.8.2.31` added to §9.1 the rule that **a row here that restates a rule stated elsewhere names that
+section as its normative home** `[MUST]`, and then applied it only to the two rows it was
+investigating. This is the sweep of the rest: **26 rows edited — 25 in §9.1 and one in §1.11 Boundary
+Conformance**, which is a second normative floor. Every named home was confirmed by opening the cited
+section.
+
+**No rule changes.** The rows keep saying what they said; what they gain is a resolvable authority, so
+the next time one drifts from its source the drift is visible from the copy.
+
+The sharpest instance is a pair whose authorities point in **opposite** directions, while both rows
+cited both sections and named neither:
+
+- **`501`** — §6.2 declares itself the restatement and **§3.3** the authority.
+- **`404`** — §3.3 declares itself the restatement and **§6.2** the authority.
+
+A reader of the floor could not tell which way either pointed.
+
+Two rows were examined and ruled **not** restatements: the `0.8.2.13` `system/*` withdrawal, whose
+only home is that list, and §9.2's `SHOULD` row, which is outside the rule's scope. Whether a floor
+row restates a rule or **is** its sole statement is decided by opening the cited section, never by the
+row's shape — one candidate inverted on reading, because §6.3's listing-filter *pseudocode* is marked
+Informative while the normative paragraph above it is the home.
+
+### Fixed — the conformance floor published the authority rule `0.8.2.22` corrected (0.8.2.31)
+
+§9.1's authority-selection row read *"selected by who named the path … handler-derived → the executing
+handler's own grant … the propagated `caller_capability` is never the authority for a derived path."*
+**§6.8 corrected that exact discriminator at `0.8.2.22`** — *derivation is not the discriminator* —
+and requires the caller's capability **and** the handler grant to **both** pass for a path derived
+within the caller's request.
+
+**A peer built to the floor row flattens that intersection.** That makes the §6.3 listing filter
+vacuous and lets a narrow caller merge anywhere the tree handler can reach: the hole `0.8.2.22`
+closed, still published positively for eight revisions, in the MUST-implement list an implementer
+builds from.
+
+A second row was stale in the milder direction — the unmatchable-exclude row carried `0.8.2.21`'s
+deny without `0.8.2.22`'s bound.
+
+§9.1 now carries a standing `[MUST]`: **a row that restates a rule stated elsewhere names that section
+as its normative home.** Its swept application is `0.8.2.32`.
+
+> A section-granularity check does not find this class. Measured across 21 revisions, §9 already cites
+> every section that gained a stamped MUST — so a row can cite §6.8 for one obligation while a second
+> obligation in the same section is ungated, and the citation makes both look covered.
+
+### Changed — `501` is reachable only after the permission check, and `ping` is an example (0.8.2.30)
+
+**`501 unsupported_operation` is emitted only after `check_permission` passes.** A request that is
+both unauthorized and unimplemented is **`403`**. Three homes already drew the order this way —
+§6.5's chain, §6.7's assertion, §3.3's code row — and §6.2's *"the caller's authority is irrelevant"*
+was the outlier: it was generalized at `0.8.2.6` to fix a **code** defect, and was then readable as an
+ordering claim.
+
+**The ordering is a confidentiality property, not a preference.** Testing operation-existence first
+makes the response a two-valued oracle over a handler's manifest for any caller holding any grant on
+that path, so the operation set becomes enumerable without authorization for it. §6.7 names that
+expansion and refutes it **on the strength of this ordering** — a peer that reverses the two re-opens
+the leak while every other rule still reads as satisfied. **At least one implementation changes.**
+
+⚠ **A check driving the `501` row MUST use a grant that covers the probed operation**, or it measures
+the ordering instead of the row.
+
+**`ping` is an EXAMPLE.** Core defines no ping operation — no params type, no result type, no manifest
+entry, no floor row, no code row — and `EXTENSION-NETWORK` is its sole owner; §4.2's `MUST` is
+conditional on implementing it. A peer that does not implement it refuses correctly, and the
+conformant code for that refusal is **`501`**, not `400 invalid_request`.
+
+§4.7's half-open row keeps its `409` and loses its premise. It justified the status with *"the
+pre-authorized-connect exception is scoped to an established connection"*, contradicting §4.2's *"in
+any connection state"* at the same level. The `409` is right and the premise was not — **being
+pre-authorized is not being in-order** — and the premise is the half a reader carries to the next
+case.
+
+### Fixed — the `system/peer` identity entity had eight homes and the last sweep took two (0.8.2.29)
+
+`0.8.2.15` corrected the `system/peer` hashable basis at §4.5a item 1a and §4.6's pseudocode — the two
+homes its proposal named — and **six further sites across two documents kept the retired shape**,
+declaring three distinct shapes for one entity, including a `{peer_id}` form at §3.13 that no section
+ever specified. The worst site is §4.4's block labelled **Normative wire example**: it shares none of
+the rule's vocabulary, so neither a search by subject nor a search for the literal reaches it, **and
+it is the site an implementer copies.**
+
+Also in this revision:
+
+- **§3.6 `peers:` patterns are canonicalized at comparison** (new rule 4). The prose wrote those
+  values path-shaped, predating the id-scope grammar that matches them literally — so an include
+  granted nothing and an exclude excluded nobody, **silently**. Dispositions are asymmetric: an
+  unresolvable **include is dropped**, an unresolvable **exclude refuses the grant**. The pseudocode
+  was already correct and the prose was the drifted half; `resolve_peer_scope` is now its executing
+  arm.
+- **A per-connection peer-id form cache, and a `MUST NOT` on auto-correlating peer-id forms.** The
+  latter had been carried under a heading reading *"six normative SHOULDs"* and was mis-levelled at
+  source.
+- **§4.6 step 3 and §1.5 gave opposite keyworded outcomes on one hello** — step 3 tests the binding,
+  §1.5 governs the spelling. A strict refusal had no conformant code and now has one.
+- **`MUST accept the mint` is withdrawn.** It contradicted §1.5's `MAY` refuse and made every strict
+  deployment non-conformant.
+- **§4.5a item 1a's *"every consumer derives its hash"* is a property, not a prohibition on
+  fetching**, and its exemption now reaches §4.5's transmission ban — without which no non-floor
+  connection could be established.
+- **Every restatement of the tag member carried §6.3's four-word shorthand and none carried the scope
+  sentence defining it**, so the narrow reading was available and described no implementation. This is
+  `0.8.2.28`'s enumeration defect inverted: there a home omitted a member, here the homes dropped its
+  bound.
+- **§4.11 calls the close a choice while its own Conformance clause constrains it four paragraphs
+  away**, with no cross-reference. Continuing is the only disposition conformant on every connection.
+
+### Fixed — the root-entity-hash refusal had a code in the pseudocode and no row in the table (0.8.2.28)
+
+Which received entities §1.8's validate-on-receipt binds, and the code for a root/`included` mismatch.
+
+`included` got `400 hash_mismatch` at `0.8.2.24`. **The root arm got the same code at `0.8.2.25` — but
+only in §6.5's dispatch pseudocode.** §4.11's cause table, which is the prose home a reader consults
+for pre-admission refusal codes, carried an `included` row and **no root row**. It does now.
+
+**That gap is measurable rather than untidy, and it produced a confident false absence.** A careful
+reader consulted §4.11's table, correctly reported that it assigns no code for the root arm, and
+correctly declined to invent one — while §6.5 had assigned it three revisions earlier. **The table is
+where that answer belongs**, so the fix is the row, not the reading.
+
+> The known form of this defect is a rule that **executes** in a code block and is missed by a search
+> for the words that state it. This is its mirror: the **enumeration of the class omits a member**, so
+> a reader consults the *right* home and it answers *wrongly*. **After changing a pseudocode arm,
+> check the enumeration of its class.**
+
+`params`/`result` is not a `MUST`/`SHOULD` conflict. §3.4 already states the reason: the outer hash
+covers the `params` bytes, so `params` is not a separately received entity. What §3.4 did not say —
+and now does, in one sentence, at no change of strength — is that **§1.8's resolution-integrity
+`MUST` governs the moment a handler resolves through an embedded hash for an authority decision.**
+That rule lives under a different noun, so a reader looking up the field never reached it.
+
+### Fixed — three fossils in one encoding specification, and a refusal class with no code (0.8.2.27)
+
+`ENTITY-CBOR-ENCODING` restates rules whose authority lives elsewhere, and three of those
+restatements had outlived the design they restate.
+
+- **The `content_hash_format` registry is pinned to `ENTITY-CORE-PROTOCOL` §1.2 as its single
+  normative home.** ECF §4.3/§4.4/§4.6 had `0x03` and `0x04` **transposed** against it, so the corpus
+  bound `ecfv1-blake3` to two codes. **Latent, not live** — `0x00` is the only production code.
+- **The format code is a varint, not a fixed octet.** §4.5 specified an OCTET; ECF's own Appendix E
+  already required the varint reading. The tell that ties the two together is `0xFF`: §4.3 reserved it
+  *"for an extension mechanism if >254 formats needed"*, an escape hatch only a one-byte field needs,
+  in a registry whose own rule is that **255 is never allocatable, because a `0xFF` byte cannot
+  terminate a varint.**
+- **ECF §9.2's *"Decoders MUST accept any valid CBOR (not just deterministic)"* and *"preserve unknown
+  tags"* are withdrawn.** That is pre-Option-B text contradicting §1.11 at `MUST` level, in the
+  section an implementer reads while writing a decoder. Two adjacent sections were checked and do
+  **not** conflict — §10.3 is the refusal's detection mechanism — which shrank the fix from three
+  sections to one.
+
+**`400 non_canonical_ecf` was over-narrowed, and the class it is named for had no code.** `0.8.2.24`
+and `0.8.2.26` correctly ruled the code off the framing arm and off a mis-keyed `included` entry,
+arguing that the code selects the caller's remedy — and wrote the scope as *"§6.3 defines that code
+for tag-policy violations specifically"*, narrower than that argument supports. **Both exclusions
+stand; only the over-narrowing is corrected.** §4.7 had no row for the code at all, and §3.3's
+enumeration — which §8.3 declares authoritative — was missing both it and `hash_mismatch`. Verified
+strictly additive against independently built implementations.
+
+### Fixed — the signature message had five normative homes and the executable one disagreed (0.8.2.26)
+
+**A signature is computed over the target entity's FULL `content_hash` — format code ‖ digest**
+`[MUST]`. §7.3 is the single normative home; every other statement restates it and now names it.
+
+The question was filed against three documents. **There are five homes**, and the two nobody had
+enumerated — §4.6's `authenticate` pseudocode and §3.5's invariant-pointer path width — both already
+state the hash reading. §10.2 was never a third position: it cites §7.3 as its authority in the same
+sentence that drops the format code.
+
+**The sole outlier is a test-vector category, and it declares itself downstream of §7.3 in its own
+text.** The artifact contains its own correct input one category above: `content_hash.1` produces
+exactly the value §7.3 names as the message, and the signature category three rows down does not use
+it. Every live implementation implements §7.3; **the only implementation of the raw-bytes reading was
+the fixture.**
+
+Three grounds, and the third is why this is not a coin flip: **a verifier reaching a signature through
+the §3.5 invariant pointer holds the hash and may hold no copy of the entity**, and the format code is
+the domain separator §7.3 exists to bind.
+
+⚠ **The vectors are NOT regenerated here.** The corpus changelog records the artifact as
+known-divergent so nobody reads the current digest as blessed.
+
+The rest of this revision withdraws, demotes, permits or partitions; **none of it adds an obligation
+to a conformant peer**:
+
+- **§4.11 arm (a) splits into a1/a2** — the close is a *choice* where the frame was consumed whole and
+  is **forced** where the stream is desynchronized. Arm (f) obliged the impossible on the truncated
+  half.
+- **`non-canonical` is dropped from §4.11's framing row.** The framing arm and §5.4's tag policy now
+  **partition** the input, instead of both `MUST`ing opposite codes for one tagged data field.
+- **A uniform verdict on an *unreferenced* `included` entry MUST NOT be required.** A list
+  representation has no wire key to mis-key, so requiring one verdict would make a conformant
+  mechanism illegal.
+- **§1.8 item 1's two mechanisms are distinguished by cost**: binding the key is one check at one
+  site; discarding the key and addressing by validated `content_hash` is *N* ingresses, and *N−1* of
+  *N* is wire-indistinguishable from *N* of *N*.
+
+### Fixed — the pre-admission refusal is one invariant, not five patches (0.8.2.24 → 0.8.2.25)
+
+**One un-parseable frame produced three different caller-observable answers across three independently
+built implementations** — a bare close, a silent drop, and a coded `400`.
+
+The same invariant was already stated in **five places at four strengths**, three of them giving the
+same reason in nearly the same words and **none cross-referencing another**: §4.6 (connect-auth,
+`MUST` emit coded `401`, *"a bare close is non-conformant"*), §5.2a (hash-binding, `MUST` emit; drop
+**and** bare close both non-conformant), §4.10a (oversize, `SHOULD` … otherwise `MAY` close), §3.3
+(wrong root type, `MUST` close, with no coded frame at all), and the **framing arm, unstated**.
+
+**New §4.11 states it once:** a coded frame is **mandatory**, the close is **optional**, and a silent
+drop and a bare close are **two distinct non-conformances**. The frame belongs to the **class**; the
+**code** belongs to the **cause** — framing and wrong-root-type are `400 invalid_request`.
+
+Four landed sites contradicted it and **three of the four are not prose**: §6.5's dispatch-chain
+pseudocode (*"Other type? → Invalid. Close connection."*, with no failure arm on any of its
+decode/validate steps), §9's conformance inventory — **which GATED the bare close** — and §3.3's prose
+`MUST`. **The dispatch chain is the block an implementer copies**, which is the likeliest origin of
+two of the three divergent behaviours.
+
+Checked and **exempt**, stated rather than skipped: `EXTENSION-SIGNALING` §9.2 (a separate three-verb
+mailbox transport) and `EXTENSION-NETWORK` §10 (a deliberate shutdown).
+
+Two further rules, both forced by measurement:
+
+- **A narrowing MUST NOT be lossy about its own emptiness, at every seam.** `0.8.2.20`'s
+  dispatch-boundary fix deletes this rule's input, and a guard green on 108 in-tree rows was dead at
+  the wire. Ordering is *one* way to satisfy non-lossiness and does not reach the second seam.
+- **The empty-result rule binds where the absent case is WIDER than the request.** A broad result
+  refuses `400 path_required`; an optional **filter** answers the empty result at `200`, because
+  `path_required` means *supply a resource* and this caller supplied one. **Operations must now
+  declare which shape they are** — one sentence was censused and bound to 2, 5 and 13 operations by
+  three different readers, each inferring a per-operation property no specification declared.
+
+**Cost, recorded before the run rather than after it: 21 of 34 measured peers move PASS → FAIL on the
+§4.10(a) strengthening.** That is the only direction the rest of the corpus already points.
+
+Two new conformance requirements. `CORE-PREADMISSION-REFUSAL-1` arm (f) — a refusal on a multiplexed
+connection carrying an admitted request — cannot be inferred from the others and has never been
+driven. `CORE-RESOURCE-TWO-EMPTIES-1` **must cross a socket**: an in-tree test that builds the handler
+context directly is structurally blind to the failure it exists for.
+
 ### Fixed — a capability/identity forgery in the envelope `included` map (0.8.2.23)
 
 **Every authority lookup resolved an entity by a wire-supplied address that nothing verified.**
@@ -74,6 +316,132 @@ any handler authorize a tree read.
 
 > Both revisions landed in one editing pass and no peer observed an intermediate `0.8.2.22` document.
 > Each delta carries its own revision marker inline so either number resolves to the rules it named.
+
+### Fixed — an unmatchable scope pattern is fail-closed in an include and fail-OPEN in an exclude (0.8.2.21)
+
+**`0.8.2.20` ruled that `matches_pattern` MUST return false when either operand is the unmatchable
+sentinel, and argued its safety from the include side only.** Matches-nothing is fail-closed in an
+include and **fail-open in an exclude**: a granter writing `exclude: ["*/secret"]` gets an exclusion
+that excludes nothing and a grant **silently wider than written**, with no error anywhere, because the
+sentinel is designed not to raise.
+
+Measured, it is **three sites**, not the one reported — `matches_scope`'s exclude loop (every
+dimension of every grant), `check_resource_scope`'s concrete arm, and its pattern arm, which was
+fail-closed **by accident** via a negated test. Fixed in both directions:
+
+- **A capability carrying an unmatchable scope pattern is INVALID at mint, delegate and verify**
+  `[MUST]`, not `MAY` — two conformant peers would otherwise reach different authorization decisions
+  on the same bytes.
+- **An unmatchable exclude excludes EVERYTHING at evaluation.**
+
+Stated at the scope layer, which already knows the position, so `matches_pattern` stays uniform over
+its operands and remains transcribable into any language.
+
+Four further deltas:
+
+- **`effective_targets` returns the RAW survivor and decides the skip canonically.** `0.8.2.20`'s
+  formulation contradicted §6.13 **in the same revision** — that section derives the install pattern
+  against the `system/handler/` prefix and its own worked example is peer-relative. **Undetectable by
+  the existing check**: every arm passes under either reading, so an implementation reading the
+  pseudocode literally goes conformance-green and then answers `path_required` where §6.13 expects a
+  pattern.
+- **Path validation is a property of the BOUNDARY, not of the channel.** `tree:extract` and
+  `tree:merge` derive paths from `params`, which no resource-target pre-validator ever sees, and the
+  store boundary **asserted** under a comment claiming pre-validation — a wire-reachable remote
+  denial of service. §5.4 and §6.7 already named `params`; **a rule stated over an enumeration of
+  channels invites an implementation that enumerates channels.**
+- **The handler-level check's authority is selected by who NAMED the path, not by who initiated the
+  chain.** Caller-named paths take the caller's capability, handler-derived paths take the handler's
+  own grant, peer-root takes no check. §6.8's *"voluntarily"* is struck, and §6.3's parameter is
+  renamed **`authority`** — two implementations filled a parameter named `capability` from
+  attribution. ⚠ **`0.8.2.22` supersedes the discriminator itself**: derivation is not the test, and
+  the two authorities can **intersect**.
+- **The §6.7 read carve-out is CLOSED**, with the region searched named so the negative is reviewable.
+  The listing filter already checks every returned entry individually, so a performance rationale for
+  exempting reads would have had to exempt that too.
+
+Two new conformance requirements, both wire-observable and both security vectors:
+`CORE-EXCLUDE-UNMATCHABLE-1` — **with** the well-formed-exclude control, without which the row cannot
+tell a working exclusion from a peer that denies everything — and `CORE-PARAMS-PATH-TOTAL-1`, which
+cannot be a false pass, because a peer that pre-validates only the resource target either answers
+`200` or dies.
+
+### Fixed — the authorization subject is the effective set, and a discarded verdict is a class (0.8.2.20)
+
+Six deltas. The first three close an authorization bypass.
+
+- **`effective_targets` is a named function in §5.2**, called by the authorizer and by the handler. It
+  was **three** layers, not two — §9.1's conformance floor derived the set a **third** time, in prose.
+  That row now cites the function and **MUST NOT restate its derivation**. The subject rule is stated
+  generally — **subject ⊆ `effective_targets`** — with `effective[0]` as its single-resource
+  specialization, so the first set-valued operation does not meet a half-rule.
+- **A pattern target is `400 malformed_resource` for an operation requiring a concrete path.** §2.1's
+  two undeclared codes land in §3.3's enumeration.
+- **§6.7 goes act-neutral: reads or writes.**
+- **The *"defense-in-depth"* characterization is withdrawn at SEVEN sites, not three.** The four
+  missed by the first enumeration include **both pseudocode comments inside the block that implements
+  the rule**, and §9.1 again. §5.2's own list says *"Both levels MUST pass"* two lines under the
+  withdrawn sentence. ⚠ **The causal story is withdrawn with it** — it measures the other way: of five
+  backends, the three that transcribe the phrase all wrote the check, and the two that never mention
+  it never wrote it.
+- **`canonicalize` is total, and its sentinel is `/never-match`.** Chosen over forms that are
+  themselves strings the specification says a path cannot be: `/never-match` violates no §1.4 rule at
+  all — it is unreachable as a canonical path **structurally**, needing no new prohibition. **All
+  three consumers are ruled**, not one: matcher, validator, storage.
+- **A discarded validation verdict is a CLASS, not a function.** `validate_absolute_path`'s verdict was
+  discarded at **both** its call sites, one of them under a comment reading *"MUST — reject malformed
+  `peer_id` segment"*. **Five sites, two functions, one defect** — and the class was never the search,
+  because the finding named a function.
+
+### Fixed — a multi-signature root never relaxes Dimension 4 (0.8.2.19)
+
+**A live over-acceptance in all three ground-up implementations**, and the opposite of the
+under-acceptance it was first reported as. The single-signature branch requires the root granter to be
+the frame peer; **the multi-signature branch accepted a root when the frame peer was merely among the
+signers.** That branch is correct for its original purpose — a peer verifying its own group root,
+where the frame is **local** — and `0.8.2.18` repurposed the frame to the **target** and silently
+re-scoped it, so a K-of-2 credential merely *including* the target relaxed Dimension 4.
+
+**Neither rule is wrong alone; they composed into a hole.** The general form is folded with it:
+**changing what a shared parameter MEANS re-scopes every check that reads it, and those readers are
+listed nowhere.**
+
+Second correction: the clause named a case that cannot occur — a peer identity is never a
+multi-granter entity — so it read as conditional when its only effect is refusal. Every implementation
+had built the effect; the text now states it.
+
+**Wire core untouched.**
+
+### Fixed — the handler frame binds a check whose four inputs were undefined (0.8.2.18)
+
+Seven deltas, every one of them raised by having **built** `0.8.2.17` and driven it three ways.
+
+- **The granter is read at the chain ROOT, the grantee at the leaf.** The leaf reading accepts only
+  the unattenuated grant and refuses every narrowing of it — backwards from every other attenuation
+  rule here, and it refuses every cross-peer continuation advance.
+- **Dimension 1's handler pattern on an outbound sub-dispatch is the target URI's peer-relative
+  path.** The check was obliged with no defined input.
+- **A presented capability is evaluated in the TARGET's frame.** In the dispatcher's frame, the
+  absent-`peers` default and §5.5's root-trust rule each refuse every credential the arm exists to
+  accept — so the arm looks implemented and denies everything.
+- **The check binds any outbound dispatch originated while a handler body executes**, autonomous
+  origination included; a top-level self-origination is out of scope for the ambient arm. The ambient
+  arm confines a **delegated** authority, and a peer originating as itself is the root of its own.
+- **Absent resource is `path_required`; more-than-one is `ambiguous_resource`.** The register
+  paragraph predated `0.8.2.14`'s split and still collapsed them, which is why two readers of landed
+  text reached opposite codes. The general form is now stated once, so the next handler specification
+  need not re-derive it.
+- **§3.3's parenthetical named two operations as needing no resource**, where `EXTENSION-IDENTITY` §6
+  gives both a resource target under an architecture-side `MUST`, at two tables. One revision old, and
+  ours. Replaced with an operation that genuinely takes none, and with the **test** rather than the
+  instance.
+- **§6.5 signature ingestion is no longer scoped to the dispatch chain.** As written, a capability
+  minted in the connect response had its root signature bound at **no path**, and every chain rooted
+  at it was unverifiable locally. §5 already required the result; the only mechanism that produces it
+  was unreachable there.
+
+**Four of the seven cost a conformant peer nothing; two move one implementation each; one is an audit.
+Nothing takes a currently-green check red. Wire core untouched.**
 
 ### Added — outbound sub-dispatch authorization, and the authority it runs against (0.8.2.17)
 
@@ -187,6 +555,276 @@ obvious wrong sweep.
 Also corrected: the crypto-agility `SEEDS.md` restatement. **No wire change and no new requirement** —
 §3.5's `MUST NOT` was already landed; four consumers of it stopped contradicting it. Raised by
 conformance measurement of the connect handshake across a population of independently built peers.
+
+### Changed — `path_required` is a core code, because the condition is core's (0.8.2.14)
+
+An extension `MUST`-ed **`400 path_required`** at two operations while its own error-code appendix
+declared itself the **closed set** for that handler and omitted it — and this row, which the
+extension-development guide claimed *"sanctions them by name"*, enumerated five spellings rather than
+the category. **So a peer obeying the appendix failed the conformance suite, and a peer passing the
+suite emitted a spelling its own extension called non-conformant.** Five implementations and two
+conformance checks had already picked the second reading.
+
+**The deciding test is whose condition it is.** `path_required` is raised by the **dispatcher**, before
+any handler runs, on §3.2's path-as-resource rule. A code belongs in the set owned by the document
+that defines the condition raising it — so this one is core's, and locating it in an extension locates
+it where it **cannot be complete**. The alternative, a row in each extension appendix, restates a core
+condition once per extension.
+
+The row now states the condition, that it is raised **at dispatch** and is therefore available to every
+handler, and that **it is not a synonym for `invalid_request`** — the remedy differs, and the code is
+what selects it.
+
+**No behaviour change for any implementation.** This makes the specification agree with what five of
+them already emit.
+
+### Removed — the `system/*` installation reservation is withdrawn (0.8.2.13)
+
+**Retracts `0.8.2.12`, which narrowed this rule.** The narrowing asked the wrong question: it argued
+about the rule's **scope** when the rule should not have existed. **Withdrawn, not re-scoped.** Three
+findings, each disqualifying on its own:
+
+1. **It was never authorized.** It entered as **one row in a design-revision migration table** —
+   *"System paths | Not reserved | `system/*` reserved for system handlers"* — with no rationale, then
+   or in any revision since. **The same revision introduced the structured grant model, in the row
+   below it** — so the reservation and the mechanism that makes it redundant arrived together.
+2. **It named a party this specification does not define.** *"User-installed handlers."* There is no
+   definition of a user, and none distinguishing one from the party running a deployment, the party
+   administering it, an extension author, or an ordinary caller — and implementations returned that
+   undefined word to callers in the refusal message.
+3. **It was not part of the authorization system.** Every engine enforced it as a hardcoded prefix
+   match firing **before** authorization is consulted, while `register` already derives its pattern
+   from `resource.targets[0]` and the standard dispatch capability check on `resource` already
+   decides, per caller and per path, whether that caller may install there. **The prefix rule
+   overrode a decision the deployment had deliberately made.**
+
+**What replaces it is the check that was always underneath: install authorization is the capability
+check on the install path.** An informative note records the real consideration — a handler bound over
+a bootstrapped one substitutes its behaviour — as something a deployment will **often** refuse, not as
+a requirement. Whether to permit installation at a `system/*` path is a deployment's risk decision.
+
+**It constrains nothing cross-peer**: no wire form changes, and a caller sees only a refusal it must
+already handle.
+
+### Changed — the `system/*` reservation is scoped to the dispatch path (0.8.2.12)
+
+> ⚠ **Superseded by `0.8.2.13`, which withdraws the rule entirely.** Retained because the reading it
+> corrected was live in the text for the file's whole history.
+
+§6.2 reserved `system/*` against *"user-installed handlers"* and stated **no purpose**, in every
+revision since the file's first commit. **Every standard extension lives under `system/*`**, so the
+widest reading — the one a reader with no rationale to scope against arrives at — described a protocol
+in which **no standard extension can be installed on any peer**.
+
+Scoped to the dispatch path: a handler installed via `system/handler:register` `MUST NOT` be installed
+at `system/*`, refused `403 forbidden_pattern`, publishing nothing. A peer's own composition —
+bootstrap handlers and standard extensions installed in-process by peer-owner code — installs there by
+construction and is not constrained.
+
+The purpose is stated with the rule: **a wire caller that could install at `system/*` could register at
+`system/tree` and shadow the peer's own store operations for every subsequent dispatch.**
+
+**No conformant peer's behaviour changes.** §9.1's row followed, because it restated the retired
+party-based scoping in different words and would otherwise have been left asserting it.
+
+### Fixed — the admission predicate was a type the specification already had (0.8.2.11)
+
+`EXTENSION-TREE` Appendix A mandated `400 invalid_request` when a submitted entity *"does not decode"*
+and **never said what decoding is**. It was already written: `put-request.entity` is typed
+`core/entity`, and §8.1 declares three fields with **no `optional` marker on any of them**.
+
+- **§6.3 gains the admission ladder** — receipt, not authoring; structure, then hash. **The ordering is
+  a data dependency, not a convention**: step two's inputs are exactly what step one establishes.
+- **§9.1 gains the row**, naming the discriminating input as the one carrying **both** faults, since
+  that is the input a row-scoped author does not write.
+- ⛔ **The one home that disagreed is the one that mattered.** `ENTITY-NATIVE-TYPE-SYSTEM` §2.8 — the
+  only table in either document describing what is on the wire at a `core/entity` slot — carried
+  **`content_hash?`**, optional. Six other homes carry the strong form. Corrected, and the row now
+  names §8.1 as its authority, so the next divergence is visible from the copy.
+
+**The receipt-versus-authoring dichotomy is false: both layers exist**, and `SDK-EXTENSION-OPERATIONS`
+§3.2 already assigns authoring to the SDK — `put(path, type, data) -> hash` cannot return that hash
+without computing it.
+
+### Changed — preserving content a peer did not model is a MUST, not a SHOULD (0.8.2.10)
+
+**One rule, thirteen homes, two strengths — and the canonical home carried the weak one.**
+`ENTITY-CORE-PROTOCOL` §2.10 and `ENTITY-NATIVE-TYPE-SYSTEM` §2.4 said `MUST`; §1.8 item 5 and
+`ENTITY-CBOR-ENCODING` §5.4 item 5 said `SHOULD` — **and §5.4 is the section that declares itself the
+canonical home of the entity-fidelity contract.** §9.1's MUST-implement list carried the rule twice,
+once through each side, so the floor stated it **at both strengths at once**.
+
+The argument that settles it is §2.10's own: **content hashing covers all of `{type, data}`, so a peer
+that strips a field it did not model publishes a different hash for the same entity and breaks content
+addressing for every downstream peer.** That is a correctness claim about the network, and a
+correctness claim about the network does not belong under a `SHOULD`. §5.4 also disagreed with itself
+four lines apart — the numbered list said `SHOULD` while the governing paragraph made losslessness
+precondition (b) of the re-encode mechanism, at `MUST`.
+
+**No implementation changes; this aligns prose with a gate that was already running.**
+
+⭐ **A bare `MUST` would have been the wrong fix, and §5.4 now carries the frame that makes it safe.
+There are THREE acts, not two.** *Relaying* an entity and *re-encoding* one are both claims that this
+is still the sender's entity, and both must preserve every byte of meaning. ***Transforming* one —
+deliberately authoring a derived entity — is neither**: new content hash, publisher signs it as their
+own, original intact and independently addressable, and the only loss is dedup against the original,
+which is a cost the transformer chose. **A transform is not a fidelity violation. Silently emitting a
+transform while claiming a relay is.** Without that paragraph, *"MUST preserve unknown fields"* reads
+as *"you may never transform an entity"* — which is false, and worse than the `SHOULD` it replaces.
+
+Two further homes were found at fold time and were **the defect surviving its own fix**:
+`ENTITY-CBOR-ENCODING` §4.6 and §9.3 said unknown **format codes** `SHOULD` be preserved when
+forwarding — the same rule one noun over.
+
+### Fixed — the code-slot rule stated a permission and a prohibition and never the consequence (0.8.2.9)
+
+**Two implementations independently concluded that the `400` slot had no governing set.** It has one:
+§3.3's `400` row names `invalid_request` as the default, enumerates five cross-cutting specifics, and
+says in terms that it *"is the generic 400 code an extension handler uses for a structurally invalid
+request."* **The `400` row is the most completely specified row in the table** — it is what the `500`
+row was brought up to match at `0.8.2.8`, not the reverse.
+
+**When two careful readers reach the same wrong conclusion from a technically correct sentence, the
+sentence is the defect.** The cause is visible in the text: `0.8.2.7` stated the **permission** (a
+specific code `MAY` be used where defined) and the **prohibition** (an undefined spelling is
+non-conformant) and **never the consequence** — what a peer emits when it wanted a specific code and
+none is defined. A reader holding an undefined spelling saw a rule that forbids what they have and
+does not say what to use instead, so they read it as an unfilled slot.
+
+The consequence is now stated at the point of the prohibition: **an undefined spelling falls back to
+that status's default**, the **absence of a table is not an unfilled slot**, and where the condition
+genuinely names something a caller would branch on, the peer **holds it as a named divergence and
+routes it** rather than minting a site.
+
+Companion fold: `EXTENSION-TREE` v4.4 gains the `put`/`set` Appendix A rows — **the two core data
+operations the protocol runs on had no row in the only error-code table their extension has.**
+
+### Fixed — a domain code at a shared status is not a synonym, and the half-open state is named (0.8.2.8)
+
+- ⛔ **§9.1's `501` synonym list wrongly named `unsupported_mode`.** `EXTENSION-REGISTRY` §6a.9.2
+  normatively `MUST`s `501 unsupported_mode` for live registration under a stored domain-control
+  policy, in a paragraph that says it is pinned deliberately because four codes were plausible.
+  **That is not this row**: the registry handler **is** registered and `register` **is** implemented,
+  and the refusal is about the mode of a stored policy. **A synonym is a second spelling of the same
+  failure; a domain code for a different failure at the same status is not one.** The list now states
+  the test — **the failure named, never the status shared.** The `0.8.2.7` list had been built from a
+  census of what peers emit, and a census cannot tell you which of those spellings the corpus
+  **mandates**.
+- **§3.3's `500` row gains an enumerated more-specific set**, symmetric with `400` and `403`.
+  `io_error` (an OS I/O operation failed) and `storage_error` (a content-store or tree bind/read
+  failed) are **distinct conditions**, and they go in §3.3 rather than a per-extension appendix
+  because **nine extensions emit one of them.** Censused by subsystem, the implementations already
+  agree on the first condition; the apparent divergence dissolves once the condition boundary is
+  drawn.
+- **The half-open connection is named in §4.7.** Post-`hello`, pre-`authenticate` is **not
+  established**, so the out-of-order row already governs an unauthenticated `ping` there and the
+  answer is **`409`**. Stated rather than given a new row, because two adjacent rules each *look* like
+  they cover it: the `invalid_nonce` row is scoped to a **pre-`hello`** `authenticate`, and the
+  pre-authorized-connect exception is scoped to an **established** connection. All three ground-up
+  implementations answer `409` by construction; this pins it by text.
+
+### Changed — the default-code column is mandatory for the generic case (0.8.2.7)
+
+**Ruled `MANDATORY` at every row that names a default**, and the force was already landed one
+paragraph below: §3.3's authorization-path code discipline binds exactly this regime for `401`/`403` —
+a default for the generic case, a more-specific code only where **defined**, and `MUST NOT` mint a
+catch-all. It is now stated for the table it sits under, rather than for the authorization path alone.
+**Advisory is refuted**: the generic case is the one with no other information in it, so it is
+precisely the case a caller cannot branch on unless the spelling is fixed.
+
+⭐ **The unit is the CODE SLOT, never a spelling.** `0.8.2.6` retired `unknown_operation` from the
+`501` slot and reported the class closed; **`not_implemented` survives everywhere, beside
+`not_supported`, `unsupported_mode`, `not_available` and `domain_control_unsupported`.** **A
+token-scoped sweep reports done while the slot stays divergent.**
+
+⛔ **The `500` row's parenthetical is struck.** It claimed *"three implementations had independently
+converged on `internal_error`"*. **Censused by slot, no implementation converged** — one carries 16
+spellings at `500`, another 15, another about 18. The evidence had been a count of the expected token
+in three trees, published as a distribution, and it was **false about all three**. The default code
+stands: it was derived from the table's structure, never from what the cohort emits. *(A build-state
+claim inside normative text is what the "specification text is not a log" rule exists to prevent, and
+it got past that rule by arriving as rationale.)*
+
+**The `404` row is scoped.** `handler_not_found` was already normative in five homes before `0.8.2.6`
+tabulated it. The row now names §6.2 as the defining home and **excludes the in-handler case** — an
+absent entity, binding or hash **inside a registered handler** is a domain outcome, so nobody sweeps a
+tree handler.
+
+**Satisfaction mode is stated per row, because the `500` row cannot carry one**: a conformant peer
+cannot be made to fail internally on demand over the wire, so that row is satisfied by **source
+audit**, not by a wire check.
+
+### Fixed — §3.3 named a default code for three statuses and left three bare (0.8.2.6)
+
+Two folds in one revision, so the cohort vendors once.
+
+**The `501` code split.** Implementations divided between `unknown_operation` and
+`unsupported_operation` — **and the STATUS differed with it, `400` versus `501`** — so a client keying
+on `result.data.code` got a different remedy depending on which peer refused. One implementation's
+reachability path already had to accept **both spellings at both statuses**, with a source comment
+naming the divergence outright: a measured cross-implementation split, recorded in a comment and never
+routed.
+
+**The cause is structural, and it is the half worth fixing.** §3.3 named a default code for
+`400`/`401`/`403` and **left `404`/`500`/`501` bare**, so an implementer at a `501` site had nothing to
+look up where every other default code lives. They reach for §6.2, read a capability-handler heading,
+conclude it is scoped, and **mint**. So: **§3.3's `404`/`500`/`501` rows carry their defaults, §6.2's
+sentence is marked general with §3.3 named as its authority, and `unknown_operation` is retired.**
+Nothing is invented — `501` and `404` were already in the corpus.
+
+**Two connect-path orderings are pinned:**
+
+1. **A pre-establishment foreign-namespace EXECUTE answers `400 invalid_request`, not `401`.** A `401`
+   directs the caller to authenticate and retry, **and that retry cannot succeed at any authentication
+   state** — the remedy-selection failure `0.8.2.4`'s own split was made to prevent.
+2. **`system/protocol/connect` stays pre-authorized after establishment.** §3.3 excepts the connection
+   path from author/capability **with no state qualifier**, and §5.1 is scoped to *"authenticated
+   EXECUTE"* — the class that exception defines. §5.1 is **not** the general rule with §4.2 as its
+   exception; it is the other way round.
+
+### Fixed — a pre-establishment EXECUTE had a rule nobody could find from the connection vocabulary (0.8.2.5)
+
+**This was reported as an unruled code. It is not unruled.** §4.2's third pre-authorization rule
+already governs a non-connect EXECUTE arriving before the handshake completes — *"a missing or
+unverifiable author or signature is auth-class `401`"* — and §5.2a gives the code,
+**`authentication_failed`**. `0.8.1` put that discriminator there, replacing the bullet's blanket
+`403`.
+
+**So the three-way measurement is a conformance gap two releases old, not a design question**: two
+implementations emit the blanket `403` that `0.8.1` retired, one emits a `400`, and the two codes
+standing in for the rule (`connection_required`, `handshake_failed`) **appear nowhere in either
+specification document.**
+
+**The remedy is a note, not a row.** Every row of §4.7 describes a **connect** operation; this input is
+not a connection-handshake failure, so a row would put §4.7 and §4.2 into exactly the two-registries
+state the precedence clause forbids. **What the note fixes is findability**: §4.7 is the table an
+implementer is reading when the input arrives, and §4.2 states the rule in the vocabulary of
+**pre-authorization**, which is not searchable from the vocabulary of **connection state**.
+
+**No new obligation and no flag day**: this changes what a peer emits, never what it accepts, and
+nothing branches on the code.
+
+### Fixed — the connect surface reconciled, and the absent-`protocols` arm goes the other way (0.8.2.4)
+
+- **Row 3 retired.** `incompatible_key_type` described an intersection model §4.5 no longer uses.
+- **Row 1 names its trigger.**
+- **Row 5 scoped to §1.2 ingest**, with an explicit *"a conformance check MUST NOT treat this as a
+  handshake obligation."*
+- **Row 10 split** — a **state** conflict is `409`, matching `connection_already_established` directly
+  above it; an **unknown operation** is `400 invalid_request`, now declared at core level with its
+  class defined.
+- **§4.6's numbering is a normative order**, with the constraint placed on the **emitted pair** rather
+  than on the internal sequence, so a peer may still check cheaply first.
+- **Four §9.1 rows**, so the new obligations have somewhere a check can read them.
+- **§4.5 names §8.4's identifiers inline.** One implementation advertised a stale protocol identifier
+  from its first commit, **undetectable for the life of the project because the field was read by
+  nothing** — which is the general sentence the edit carries.
+- ⛔ **Absent or empty `protocols` is `400 invalid_request`, not unconstrained** — ruled against both
+  filing recommendations. **The measurement neither filing had is one tier away**: generated peers
+  already require the field before intersecting it, and pass conformance doing it, so the permissive
+  reading was never the cohort default and ruling it would have made passing peers **non-conformant**.
+  Both filings reached the half that matters on their own — **`incompatible_protocol` cannot be told to
+  a caller that named no version.**
 
 ### Fixed — the default handler grant spans the whole local store, not just the peer's own prefix (0.8.2.3)
 
@@ -323,8 +961,8 @@ are correct as of this release.
 
 ### Changed — the `system/peer` identity entity is pinned to the ECFv1-SHA-256 floor (v7.77)
 
-**No wire renumber, no new opcode** — the locked wire core is untouched ([ADR-0002]). Routed by core-go
-(with two green tests) after arch's `SPECIFICATION-FORMAT.md` §8.4.6 pinned `{peer_id_hex}` to the
+**No wire renumber, no new opcode** — the locked wire core is untouched ([ADR-0002]). Raised by an
+implementation (with two green tests) after `SPECIFICATION-FORMAT.md` §8.4.6 pinned `{peer_id_hex}` to the
 floor while leaving the identity entity on its author's home format. **Those two halves are unsatisfiable off
 the floor**: `{peer_id_hex}` is simultaneously a path segment and an identity-reference equality operand, and
 §1.8 / §4.5a ruled the two roles in opposite directions. Pinning only the path segment produces **two
@@ -378,21 +1016,21 @@ proposal yet covers. Tracked; it does not ship half-done.
 `ENTITY-CORE-MACHINE-SPEC.md` §3.9 still defined `system/protocol/inbox/{delivery,notification}` after both
 renames were ratified 2026-08-10 in `EXTENSION-INBOX.md` §2.1 / `EXTENSION-SUBSCRIPTION.md` §2.2. Renamed, and
 the block is now marked as a **reproduction** with its canonical home named — nothing gates spec-to-spec, so
-this surfaced by reading, in core-go, and would have kept not-failing.
+this surfaced by reading, in an implementation, and would have kept not-failing.
 
-### Changed — spec amendment 0.8.1 (keystone cross-substrate hardening, before-freeze)
+### Changed — spec amendment 0.8.1 (cross-substrate hardening, before-freeze)
 
-Surfaced by the `entity-core-keystone` cross-substrate conformance sweep (findings F31–F48 + the RT-/W hand-offs).
+Surfaced by the cross-substrate conformance sweep across the generated-peer cohort (findings F31–F48 and the associated hand-offs).
 **No wire renumber, no new opcode, no V8 semantic change** — the wire core stays locked ([ADR-0002]). Applied to
 `ENTITY-CORE-PROTOCOL.md` (§4.2, §4.4, §4.6, §4.8, §5.2, §6.11, §6.7, §3.5, §3013) and `ENTITY-NATIVE-TYPE-SYSTEM.md`
-(§4.4 table, §10.1 / Appendix B refs). **Per keystone's 2026-07-27 review, these split by validation requirement**
+(§4.4 table, §10.1 / Appendix B refs). **Per the conformance review, these split by validation requirement**
 (HANDOFF-TO-ARCH-2026-07-27-0.8.1-ratify-preconditions):
 
 **Bucket A — spec repair (a conformant peer passes unchanged; the spec contradicted itself, peers were already correct):**
 
-- **F32 (§4.2/§4.4):** missing/unverifiable `author` is auth-class **401**, not a blanket 403 (reconciled with the §5.2a discriminator). Surfaced by Nim/Julia as a spec self-contradiction — peers already mapped `AUTHN_FAIL`→401.
+- **F32 (§4.2/§4.4):** missing/unverifiable `author` is auth-class **401**, not a blanket 403 (reconciled with the §5.2a discriminator). Surfaced by two generated peers as a spec self-contradiction — peers already mapped `AUTHN_FAIL`→401.
 - **UN-b/F48 (§4.6):** key_type-support validation hoisted to an ordered **step 0**, before identity binding → `400 unsupported_key_type`. Existing vectors (`AGILITY-UNKNOWN-1`, `NEGOTIATE-KEYTYPE-1`) already gate the ordering; `unsupported_key_type` present in 38/41 peers.
-- **UN-a/F47 (§3013):** disambiguate the policy-path `{peer_pattern}` (hex-closed) from the capability `peers:` scope patterns (Base58); keystone's "add Base58 to §3013" rejected.
+- **UN-a/F47 (§3013):** disambiguate the policy-path `{peer_pattern}` (hex-closed) from the capability `peers:` scope patterns (Base58); the proposed "add Base58 to §3013" was rejected.
 - **RT-8 (§6.7):** optional MAY — return `404` (not `403`) for authz-denied to mask handler existence (must be consistent).
 
 **Bucket B — new requirements (these change what a conformant peer MUST do; need cohort vectors — the ratify gate cannot certify them until vectors exist):**
@@ -418,7 +1056,7 @@ reconciled (bare `entity` un-numbered as the primordial co-arising root).
 **Held / deferred:** **W6** (mint-time resource absolutization, §5.5/§5.5a) is a behavioral change gated on its own
 §PR-8 conformance demonstration — authored, not folded. Appendix-B systemic regen (F37 `[K]`) and the Group-E
 editorial one-liners (F36, format_code=128, F45, F33, F46, RT-10) are tracked follow-ons. Ratifies on the 28-peer
-cohort re-run. Determination: `entity-system-architecture/docs/research/reviews/ABSORPTION-keystone-findings-F31-F46-and-named-handoffs.md`.
+cohort re-run. The determination for findings F31–F46 and the named hand-offs is recorded in the Entity system architecture corpus.
 
 ### Added — non-interactive freshness knobs, W7 (0.8.1 — same cohort re-run)
 
@@ -429,7 +1067,7 @@ deployment's call" pattern applied to freshness. No wire renumber, no new opcode
 - **Knob 3 (§2966 / §5.10):** a declared cross-clock skew-tolerance `δ` — the relayed validity window is `[not_before − δ, expires_at + δ]`, declared not silent (`δ = 0` reproduces today's behavior; a *tolerance*, not clock sync).
 - **Knob 1 (§210, security consideration):** the informed-deferral note — a relayed cap is authentic + authorized but not proven fresh; replay is bounded by `min(TTL, revocation_bound) ± δ` and defended primarily by handler idempotency. The strong mechanism (challenge-response over a relayed circuit) is a **deferred future extension** (rides RELAY Mode C).
 
-Design: `entity-system-architecture/docs/research/explorations/EXPLORATION-NON-INTERACTIVE-FRESHNESS-AND-ANTI-REPLAY.md` + `ANALYSIS-NON-INTERACTIVE-FRESHNESS-CRITICALITY.md`.
+Design: `EXPLORATION-NON-INTERACTIVE-FRESHNESS-AND-ANTI-REPLAY` + `ANALYSIS-NON-INTERACTIVE-FRESHNESS-CRITICALITY`, in the Entity system architecture corpus.
 
 ### Changed — cross-peer continuation bound (0.8.1; folds the built+green-3-way continuation/bounds work)
 
@@ -440,6 +1078,6 @@ wire renumber. Applied to `ENTITY-CORE-PROTOCOL.md`:
 - **§3.11 `system/bounds`:** add the `chain_depth` field (all 3 impls ship it) — the deterministic causal-chain-length brake, inherited across the wire like `cascade_depth`, distinct from ttl/budget. Pin `chain_id` to a **single path segment** (was a UUID default with no format; marker path-safety depends on it).
 - **§5.9 (Ruling 1):** pin cross-peer TTL — the resource backstop is decremented **once per dispatch (incl. sub-dispatches), never double-counted** at ingress *and* forward. Fixes the 9-vs-64 cross-impl divergence (Rust seeded no TTL; Python double-counted).
 - **§5.9 (Ruling 2):** de-confound the magnitudes — the two MUST be **distinct** with `chain_depth` ceiling ≤ `ttl` seed (equal magnitudes let TTL mask the deterministic depth brake). **8× (seed 512) is the recommended default**, measured three-way 2026-07-27; a deployment MAY retune it for its fan-out. The conformance requirement is the *property* (the depth brake, not TTL, terminates a runaway), not the number — per the §4.10 doctrine.
-- **§4.10(b) (Ruling 3):** disambiguate the reason codes — `chain_depth_exceeded` (400) is the **capability**-chain limit; the **continuation** causal-depth brake suspends with `bounds_exceeded` (429). Two mechanisms MUST NOT share a reason string (Rust/Py were colliding).
+- **§4.10(b) (Ruling 3):** disambiguate the reason codes — `chain_depth_exceeded` (400) is the **capability**-chain limit; the **continuation** causal-depth brake suspends with `bounds_exceeded` (429). Two mechanisms MUST NOT share a reason string; two implementations were colliding on one.
 
-Governing record: `entity-system-architecture/docs/proposals/PROPOSAL-CONTINUATION-BOUNDS-PROPAGATION.md` (rev.2026-07-19). The CONTINUATION-extension-side reconciliations (§3.6 step-6 refill→decrement, §3.7 resume-roots-depth-0, §3.9 wired framing, §6.2 monotonic clause) fold in-place in `entity-system-architecture/specs/extensions/EXTENSION-CONTINUATION.md`.
+Governing record: `PROPOSAL-CONTINUATION-BOUNDS-PROPAGATION` (rev.2026-07-19), in the Entity system architecture corpus. The CONTINUATION-extension-side reconciliations (§3.6 step-6 refill→decrement, §3.7 resume-roots-depth-0, §3.9 wired framing, §6.2 monotonic clause) fold in place in `EXTENSION-CONTINUATION.md`.
