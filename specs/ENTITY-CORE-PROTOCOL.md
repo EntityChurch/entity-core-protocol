@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.2.32
+**Version**: 0.8.3
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md

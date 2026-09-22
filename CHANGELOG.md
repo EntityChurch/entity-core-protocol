@@ -7,6 +7,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+Development lands on `dev`; `master` carries the last release.
+
+## [0.8.3] — 2026-09-22
+
 **Three documents, three version lines.** Each specification's `**Version**:` header is a claim
 about *that document's* content and moves when that document's obligations do.
 `ENTITY-CORE-PROTOCOL` carries this repository's release number; `ENTITY-CBOR-ENCODING` (`1.x`) and
