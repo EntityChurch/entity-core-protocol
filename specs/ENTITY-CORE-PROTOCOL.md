@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.2.11
+**Version**: 0.8.2.14
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md
@@ -829,7 +829,7 @@ Status codes:
 |------|---------|
 | 200 | Success |
 | 207 | Partial success — binding committed but cascade halted. See SYSTEM-COMPOSITION.md §2.7A for the `system/tree/partial-result` response envelope. |
-| 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`. `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
+| 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`, `path_required`. **`path_required`** is raised when a **directly-callable** op is invoked with no `resource` (§3.2). It is raised **at dispatch, before the handler runs**, which is why it is available to every handler and is declared here rather than in any one handler's code set; it is **not** a synonym for `invalid_request`, because the remedy differs — *supply a resource* is a different instruction from *fix your request*, and the code is what selects it (0.8.2.14). `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
 | 401 | Authentication failed (also: `capability_revoked` per `EXTENSION-ROLE.md` §5.5; `unresolvable_grantee` per §5.5 of this doc — cap's `grantee` does not resolve to a present `system/peer` entity) |
 | 403 | Forbidden — request-time authorization DENY (§5.2). Default `code` = `capability_denied`; more-specific authorization codes: `scope_exceeds_authority` (capability handler request subset-validation, §6.2). See §5.2 verdict-to-status mapping. |
 | 404 | Not found. Default `code` = **`handler_not_found`** — no handler is registered at the resolved path (§6.5), **on a path that targets the local peer**. §6.2 is the defining home for this code and this row is its restatement. Distinct from 501, where a handler IS registered and the named operation is not implemented; distinct also from a 404 raised **inside** a registered handler because the requested entity, binding or hash is absent — that is a domain outcome carrying the domain's own code, not this row (0.8.2.7). A path targeting a foreign namespace is neither: it is refused at canonicalization with `400 invalid_request` (§1.4, §5.2a, §6.5 step 3). |
@@ -3099,7 +3099,13 @@ The expression runs under the handler grant — the handler's declared `internal
 
 ### 6.2 System Handlers
 
-System handlers live under `system/*` paths. Implementations MUST NOT allow user-installed handlers to register at `system/*` paths.
+System handlers live under `system/*` paths.
+
+**Installation at a `system/*` path is authorized by the same mechanism as any other registration (0.8.2.13).** `register` derives its pattern from `EXECUTE.resource.targets[0]`, and the standard dispatch capability check on `resource` (§6.13) decides whether the caller may install a handler at that path. **The protocol places no additional constraint on the `system/*` prefix.**
+
+> **Informative — a consideration, not a requirement.** A handler bound over a bootstrapped one substitutes its behaviour for every subsequent dispatch: a handler at `system/tree` replaces the peer's own store operations. Many deployments will therefore choose not to issue grants covering `system/*` install paths, or to refuse such registrations outright once the peer is composed and running. **Whether to do so is a deployment decision, not a protocol constraint** — it changes no wire form, and a caller observes only a refusal it must already be prepared to handle.
+
+*(0.8.2.13 — this section previously carried "Implementations MUST NOT allow user-installed handlers to register at `system/*` paths", and briefly a variant of it scoped to the dispatch path. **Both are withdrawn.** The rule entered the specification as an unexplained row in a design-revision migration table, in the same revision that introduced the structured grant model, and was never justified in any revision after. It named a party — "user" — that this specification does not define and does not distinguish from an operator, an extension author, or a caller; the refusal an implementation returned quoted that undefined word back to the caller. And it was enforced by a hardcoded prefix match ahead of authorization rather than by the capability system, so it overrode the grant a deployment had deliberately issued. **What replaces it is the check that was always underneath it.** Whether a composed peer should stop accepting further system extensions after startup is a live question for `SYSTEM-COMPOSITION`, and is deliberately not answered here.)*
 
 ```
 Tree Handler:
@@ -4241,7 +4247,7 @@ A peer claims a **conformance profile** when it presents itself to a conformance
 - Delegation caveat checking (§5.7)
 - System tree handler with `get` and `put` operations (§6.3) — `resource` field carries target scope as `system/protocol/resource-target`
 - Two-level capability check for tree operations (§6.3) — dispatch scope via `check_permission`, defense-in-depth path scope via `check_path_permission`
-- System path reservation — user handlers MUST NOT register at `system/*` (§6.2)
+- *(0.8.2.13 — **"System path reservation — user handlers MUST NOT register at `system/*`" is WITHDRAWN and is no longer a conformance requirement.** Install authorization at any path, `system/*` included, is the standard dispatch capability check on `resource` (§6.2, §6.13). A peer that refuses `system/*` registrations is applying deployment policy and remains conformant; so does one that permits them.)*
 - Handler manifests at pattern paths as `system/handler` entities (§6.1)
 - Handlers handler with `register` and `unregister` operations (§6.2)
 - Bootstrap handler initialization: `system/tree`, `system/handler`, `system/protocol/connect` (§6.9); `system/type` if type validation is provided
