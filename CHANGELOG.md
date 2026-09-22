@@ -7,6 +7,81 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+**Three documents, three version lines.** Each specification's `**Version**:` header is a claim
+about *that document's* content and moves when that document's obligations do.
+`ENTITY-CORE-PROTOCOL` carries this repository's release number; `ENTITY-CBOR-ENCODING` (`1.x`) and
+`ENTITY-NATIVE-TYPE-SYSTEM` (`4.x`) are on independent ladders and have never tracked it. Read each
+header rather than inferring one from another.
+
+**Why the entries below carry a fourth component.** Development between releases runs under a
+trailing component on `ENTITY-CORE-PROTOCOL`'s version — `0.8.2.1`, `0.8.2.2`, and so on — whose
+only job is to tell implementers that core text moved without inventing a release number between
+releases. Each is a landed fold. **The component is stripped when a release is cut**, the same way
+`0.8.0.x` was stripped at `0.8.2`; the per-revision marks stay in these notes because
+implementations cite them.
+
+**The public surface these notes are measured against** is the normative text of the three
+specifications in `specs/` and the conformance corpora in `specs/test-vectors/`. **The locked wire
+core is untouched** — no renumber, no new opcode ([ADR-0002]). Several refusal *codes* are newly
+declared in the status vocabulary, which is the point of the entries that do it: the rule already
+existed and the code it named appeared nowhere a reader would look. Everything below is a rule
+stated where the specification had nowhere for it to live, a rule corrected against a neighbouring
+section that contradicted it, or a rule withdrawn.
+
+### Changed in ways that can break an existing caller
+
+**A peer conformant to the last published text can be non-conformant under this one.** Six items,
+each a thing an implementation must now do differently; the sections further down carry the full
+reasoning and the section numbers. The ordering rule and the authority intersection are the two
+that change an answer already on the wire.
+
+- **`501 unsupported_operation` is reachable only after the permission check passes.** A request
+  that is both unauthorized and unimplemented now answers **`403`**, not `501`. A peer that tests
+  operation-existence first must reorder the two — and until it does, its `501`-versus-`403`
+  responses are a two-valued oracle that lets any caller holding *any* grant on a path enumerate
+  that handler's whole operation set. The order was drawn in the dispatch chain and asserted in a
+  parenthesis, and stated as an obligation in neither; an implementation was measured on the other
+  reading. *(0.8.2.30)*
+- **A path derived inside a caller's request is authorized by an intersection.** The caller's
+  verified capability **and** the executing handler's own grant must **both** pass — derivation is
+  not the discriminator; serving a live caller's request is. The conformance floor published the
+  handler grant alone as the authority for eight revisions, so a peer built from that list grants
+  strictly more than it should: a narrow caller can reach anywhere the tree handler can, and the
+  listing filter is vacuous. *(0.8.2.22, swept through the floor at 0.8.2.31)*
+- **An unmatchable scope pattern is fail-closed on both sides.** A capability carrying one is
+  **invalid** at mint, delegate and verify, and an unmatchable `exclude` excludes **everything**.
+  Previously an exclusion that matched nothing silently produced a grant wider than written, with
+  no error anywhere. Capabilities that used to verify are now refused. *(0.8.2.21, ordered at
+  0.8.2.22)*
+- **An inbound request naming another peer's namespace is `400 invalid_request`.** The refusal
+  itself is unchanged and always was `400`; what changed is that the `404 handler_not_found` row —
+  the only code the specification previously explained at the point an implementer reads — now
+  says so explicitly. A peer answering `404` here was never conformant and is now measurably
+  non-conformant. *(0.8.2.2)*
+- **Preserving content a peer did not model went `SHOULD` → `MUST`**, at the section that declares
+  itself the canonical home of the entity-fidelity contract, and at the two unknown-format-code
+  lines that are the same rule one noun over. It had said `SHOULD` while three other homes said
+  `MUST`, so the conformance floor stated one rule at two strengths at once. Stripping an
+  unmodelled field republishes a different content hash for the same entity, which is a
+  correctness claim about the network and does not belong under a `SHOULD`. A peer that took the
+  `SHOULD` literally is now non-conformant; a peer that implemented what the text meant is
+  unaffected. **Deliberately authoring a derived entity is still not a fidelity violation** — the
+  section now carries the frame that separates relaying and re-encoding from transforming.
+  *(0.8.2.10)*
+- **The ECF conformance corpus is de-versioned.** `conformance-vectors-v1.{cbor,diag}` are now
+  `conformance-vectors.{cbor,diag}`. **No vector value changed** — the `.cbor` is byte-identical,
+  `sha256:9695b1f1d939cfdfdd4297f8ad32122d424b1ec180cfae74c92d509d88f7c6dc`, 71 vectors, measured
+  on both sides — but anything pinning the corpus **by filename** stops resolving. Verify a
+  vendored copy by digest; a filename mismatch makes a vendor check report *could not look*, which
+  is indistinguishable from a pass. The corpus changelog beside the vectors carries both artifacts'
+  digests.
+
+**Also withdrawn from the published tree**, each with its own section below:
+`ENTITY-CORE-MACHINE-SPEC` (retired — it was a derived restatement and had drifted from the specs
+it restated), and the two authoring standards `SPECIFICATION-FORMAT` and
+`STYLE-NAMING-CONVENTIONS`, which are now single-homed in `entity-system-architecture` where they
+are written. If you hold a link to any of the three, `.release-removals` says where it went.
+
 ### Fixed — the conformance floor's restating rows did not name their authorities (0.8.2.32)
 
 `0.8.2.31` added to §9.1 the rule that **a row here that restates a rule stated elsewhere names that

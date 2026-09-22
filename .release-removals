@@ -1,48 +1,108 @@
-# .release-removals — deliberate deletions against the PUBLISHED tree.
+# .release-removals — files that used to be published here and are not any more.
 #
-# One path or path-prefix per line; `#` comments allowed. The `[6/6] public-regress`
-# gate blocks any release that removes a file already on public `master` unless it is
-# declared here. A deletion is not forbidden — it must be intended, and this file is
-# the reviewed record that it was. Read by dev-pipeline/promote/promote.sh.
+# If you followed a link into this repository and it no longer resolves, this file
+# says where the thing went. Every entry below is a deliberate removal, not an
+# accident: one path or path-prefix per line, with the reason above it.
 #
-# A comment-only or blank file is NOT an allow-all; it declares nothing.
+# `#` starts a comment. A comment-only file declares nothing.
+
+
+# ── The ECF conformance corpus is de-versioned ─────────────────────────────────
+# `conformance-vectors-v1.cbor` and `conformance-vectors-v1.diag` are now
+# `conformance-vectors.cbor` and `conformance-vectors.diag`, in the same directory.
+#
+# NO VECTOR VALUE CHANGED. The `.cbor` — the artifact an implementation loads — is
+# byte-identical across the rename:
+#
+#     sha256 9695b1f1d939cfdfdd4297f8ad32122d424b1ec180cfae74c92d509d88f7c6dc
+#     71 vectors, measured on both sides
+#
+# The `.diag` moved by two header-comment lines that named the old filename, and by
+# nothing else; it is non-normative source, and its digest is recorded in
+# `specs/test-vectors/ecf-conformance/CHANGELOG.md` beside the vectors.
+#
+# The version was in the filename because the corpus had no other place to carry its
+# history. It has one now — that CHANGELOG — so the name no longer needs a number,
+# and a number in a filename is a pin that silently stops matching.
+#
+# ⚠ IF YOU VENDOR THIS CORPUS, PIN IT BY DIGEST, NOT BY FILENAME. A copy fetched by
+# the old name does not fail loudly; it fails as "file not found", which a check can
+# report as nothing-to-do rather than as a miss.
+specs/test-vectors/ecf-conformance/conformance-vectors-v1.cbor
+specs/test-vectors/ecf-conformance/conformance-vectors-v1.diag
+
 
 # ── The crypto-agility corpus is de-versioned ──────────────────────────────────
-# The corpus had two committed copies — a revision-stamped working copy under
-# `specs/test-vectors/v767/` and a de-versioned publish form under
-# `crypto-agility/` — and they collapse into one. The published `-v1` names go with
-# it. The artifact is byte-neutral across the rename:
-# b5484e84dd2cddfa7d3cc8a041deba92cb29615aedb2180e31d8b6910ac5b648, 10874 B,
-# measured on both sides. `agility-SEEDS.md` -> `SEEDS.md` is a rename only.
+# The same change, one release earlier, to the other corpus:
+# `agility-vectors-v1.{cbor,diag}` are now `agility-vectors.{cbor,diag}` and
+# `agility-SEEDS.md` is now `SEEDS.md`, all in `specs/test-vectors/crypto-agility/`.
+#
+# Byte-neutral across the rename:
+#
+#     sha256 b5484e84dd2cddfa7d3cc8a041deba92cb29615aedb2180e31d8b6910ac5b648
+#     10874 bytes, measured on both sides
 #
 # A reader loses nothing: the same three files are published under the new names,
-# `crypto-agility/README.md` points at them, and `crypto-agility/CHANGELOG.md` (new,
-# declared canonical) carries the corpus history back to the first byte-pin.
+# `crypto-agility/README.md` points at them, and `crypto-agility/CHANGELOG.md`
+# carries the corpus history back to the first byte-pin.
 #
-# DECLARE ALL THREE EVEN THOUGH THE GATE ONLY FLAGS ONE. `public_regression_ok`
-# runs `git diff --diff-filter=D` with rename detection at its default (ON), so in
-# this tree only the `.cbor` surfaces as a deletion — the `.md` and `.diag` pair as
-# renames and pass silently. That is the gate under-reporting, not a smaller
-# removal. Declaring only what the gate happens to see would make this file a record
-# of the tool's blind spot rather than of our intent.
+# All three are listed even though a rename-detecting diff only ever surfaces the
+# `.cbor` as a deletion. This file is the record of what was intended, not a
+# transcript of what a diff happened to notice.
 specs/test-vectors/crypto-agility/agility-SEEDS.md
 specs/test-vectors/crypto-agility/agility-vectors-v1.cbor
 specs/test-vectors/crypto-agility/agility-vectors-v1.diag
 
-# ── [ADR-0031] — rolling status docs are not a publication surface ─────────────
-# `docs/status/STATUS.md` has been public since the last release and its `[[doc]]`
-# block is removed from CANONICAL-DOCS.toml in the same commit as this line.
+
+# ── ENTITY-CORE-MACHINE-SPEC is retired ────────────────────────────────────────
+# It was a condensed restatement of the three real specifications, maintained by
+# hand. There is no replacement and there deliberately will not be one: a
+# restatement ages on every edit to its source, nothing can check a specification
+# against a paraphrase of itself, and when two of its sections were finally read
+# against the originals both were wrong — one missing a refusal row entirely, one
+# still carrying a rule the real spec had corrected two releases earlier.
 #
-# Why: a rolling status file is working memory — dated measurements, seat names,
-# blockers, half-verified numbers — and [ADR-0031] rules that `docs/status/`
-# publishes nothing, `STATUS.md` included. Keeping it public is what forces pin
-# hygiene and audience-shaped prose onto a file whose whole value is being frank.
+# The specifications in `specs/` are the whole contract. Its two sections anyone
+# cited live there:
 #
-# What a reader loses: nothing they came for. README.md answers "what is this",
-# CHANGELOG.md answers "what changed", and the specs themselves are the artifact —
-# all declared canonical and written for that reader. Reversible: restore the
-# `[[doc]]` block and drop this line.
+#     §1.8 Entity Fidelity        -> ENTITY-CBOR-ENCODING.md   §5.4
+#     §6.4 Connection Error Codes -> ENTITY-CORE-PROTOCOL.md    §4.7
 #
-# Prefix, not just the one file: the dated HANDOFF-*/CHECKPOINT-*/PAUSED-* snapshots
-# beside it are internal too, and none should reach public master again.
+# It also advertised itself as a complete machine-readable specification for
+# generating a conforming peer. It never was — the generator that produces the
+# cross-language peer cohort reads the real specifications and never read this one.
+specs/ENTITY-CORE-MACHINE-SPEC.md
+
+
+# ── The two authoring standards are single-homed elsewhere ─────────────────────
+# `SPECIFICATION-FORMAT` (how a normative specification document is written) and
+# `STYLE-NAMING-CONVENTIONS` (identifier naming — and these names are part of the
+# wire contract) are published by the `entity-system-architecture` repository, at
+# `specs/` in that tree. Read them there.
+#
+# They are not protocol text. The reader who needs them is someone authoring a
+# specification, not someone implementing this one, and they cover documents well
+# beyond this repository.
+#
+# The copies here were deleted because two copies of one standard is the defect.
+# Inside a single release cycle SPECIFICATION-FORMAT's copy here had fallen a whole
+# section family behind — which made three *correct* citations report as stale — and
+# STYLE-NAMING's had forked in both directions at once, so neither side was a
+# superset of the other and there was no clean copy to sync from.
+specs/SPECIFICATION-FORMAT.md
+specs/STYLE-NAMING-CONVENTIONS.md
+
+
+# ── The rolling status file is no longer published ─────────────────────────────
+# `docs/status/STATUS.md` was public at the last release and is not any more, along
+# with the dated snapshots beside it.
+#
+# It is working memory — in-flight measurements, half-verified numbers, notes to the
+# next person picking the work up — and its whole value is being written without an
+# audience. Publishing it is what turns it into prose for one.
+#
+# Nothing a reader came for is in it: `README.md` says what this is, `CHANGELOG.md`
+# says what changed, and the specifications are the artifact.
+#
+# A prefix, not one file: nothing under `docs/status/` publishes.
 docs/status

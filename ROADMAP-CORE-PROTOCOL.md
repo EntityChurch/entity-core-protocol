@@ -1,6 +1,5 @@
 # Core Protocol — Domain Roadmap (canonical, living)
 
-**Version**: 0.8.0
 **Status**: Active
 
 **Target repo:** `entity-core-protocol`.
@@ -9,13 +8,18 @@ the type system, the identity/capability/dispatch core, and the core tree operat
 the **mandatory convergence layer** (`--profile core`): agree on this and any two peers
 interoperate at the substrate.
 
-> **Canonical & living.** This roadmap is updated as the protocol moves; the content/papers
-> projects pull from it. Maturity levels (M0–M6) and the per-artifact source-of-record are
-> defined in **`STATUS-RELEASE-SURFACE-AND-MATURITY-CANONICAL.md`** (the single source of
-> truth) — this doc is the **forward-looking, domain-scoped view** over that data.
+> **Canonical & living.** This roadmap is updated as the protocol moves. It is the
+> **forward-looking, domain-scoped view**: the maturity ladder below and where each artifact
+> currently sits on it.
 
-**Protocol line:** V8 — `ENTITY-CORE-PROTOCOL.md` `**Version**: 0.8.0` (release line `v0.8.0`) ·
-**Floor:** keystone **15 generated peers, `--profile core` 0-FAIL** + Go/Rust/Python release-green.
+**Protocol line:** V8 (Genesis tag `v0.8.0`) · **Floor:** keystone **15 generated peers,
+`--profile core` 0-FAIL** + Go/Rust/Python release-green.
+
+> **Versions are not restated here.** Each specification's own `**Version**:` header is
+> authoritative for that document, and the three move on independent ladders. The table below
+> records *maturity and trajectory*, which are this document's to state; for the number, open the
+> specification. A number copied out of a document has nobody to keep it current, and this table's
+> copies were a full release cycle stale before anyone checked them.
 
 ---
 
@@ -28,16 +32,17 @@ re-derived by 15 languages, not just the three reference impls.
 
 ## Artifacts & maturity
 
-| spec | version | maturity | trajectory | role |
+| spec | version line | maturity | trajectory | role |
 |---|---|---|---|---|
-| `ENTITY-CORE-PROTOCOL` | 0.8.0 | **M6** | 🟢 floor stable | the spec — Layers 0–4; the universal-tree model (§1.4/§1.7) |
-| `ENTITY-CBOR-ENCODING` | 1.5 | **M6** | 🟢 byte-stable v7.56→v7.77 | ECF — the wire contract (App-E conformance corpus) |
-| `ENTITY-NATIVE-TYPE-SYSTEM` | 4.2.1 | **M6** | 🟢 | core type system + native types |
-| `EXTENSION-TREE` | 4.0.2 | **M6** | 🟢 | **tree get/put = core** (§2); snapshot/diff/merge/extract/view ride along |
-| core `test-vectors/` | — | **M6** | 🟢 | ECF + crypto-agility corpora (vendored to keystone) |
+| `ENTITY-CORE-PROTOCOL` | `0.x` — carries the release number | **M6** | 🟢 floor stable | the spec — Layers 0–4; the universal-tree model (§1.4/§1.7) |
+| `ENTITY-CBOR-ENCODING` | `1.x` — independent | **M6** | 🟢 byte-stable v7.56→v7.77 | ECF — the wire contract (App-E conformance corpus) |
+| `ENTITY-NATIVE-TYPE-SYSTEM` | `4.x` — independent | **M6** | 🟢 | core type system + native types |
+| `EXTENSION-TREE` | `4.x` — not in this repo | **M6** | 🟢 | **tree get/put = core** (§2); snapshot/diff/merge/extract/view ride along |
+| core `test-vectors/` | pinned by sha256, not numbered | **M6** | 🟢 | ECF + crypto-agility corpora (vendored to keystone) |
 
-~~`ENTITY-CORE-MACHINE-SPEC`~~ — **RETIRED 2026-08-31**, archived to `docs/archive/` and undeclared
-from `CANONICAL-DOCS.toml`. **G3 is closed as *retire*, not *make current*.**
+~~`ENTITY-CORE-MACHINE-SPEC`~~ — **RETIRED 2026-08-31** and no longer published. **G3 is closed as
+*retire*, not *make current*.** Its §1.8 is now `ENTITY-CBOR-ENCODING` §5.4 and its §6.4 was always
+`ENTITY-CORE-PROTOCOL` §4.7; `.release-removals` carries the same note.
 
 ## Stages / phases
 
@@ -56,8 +61,8 @@ verdict-determinism errata) all landed and re-converged. The protocol is feature
   **nothing gates spec-against-spec**, so the drift is only reachable by a human reading both
   documents side by side. Retirement had been decided **2026-08-02** and its one precondition —
   relocating §1.8 to `ENTITY-CBOR-ENCODING` §5.4 — was met **2026-08-10**; the retirement itself then
-  sat undone for four weeks and cost a fold (FM-1 found §6.4 and §6.2 both wrong). Archived to
-  `docs/archive/` with a retirement banner, undeclared from `CANONICAL-DOCS.toml`.
+  sat undone for four weeks and cost a fold (FM-1 found §6.4 and §6.2 both wrong). It is no longer
+  published; `.release-removals` says where its two cited sections went.
 
 **Stage — Hardening program (forward, post-release, proposal-first).** The substrate is
 correctness-complete; the open frontier is non-functional (resilience, security-under-load,

@@ -93,6 +93,22 @@ title = "Crypto-Agility Conformance Corpus — Changelog"
 blurb = "What changed in the corpus, when, why, and which cross-impl round re-blessed it."
 group = "Test vectors"
 
+# Same reasoning as its crypto-agility sibling above, and one more: the ECF corpus
+# is de-versioned in this cut, so this file is the ONLY place a reader can get the
+# artifact digests that make the rename verifiable. `.release-removals` sends them
+# here by name.
+#
+# ⚠ IT WAS ALREADY PUBLISHING, UNDECLARED. The keep-list drops loose root prose and
+# prose under a top-level doc root; `specs/` is neither, so a `.md` nested there
+# ships whether or not anybody declared it. Undeclared-and-published is the shape
+# that leaves no trace in a diff — declaring it is how the decision becomes visible,
+# not how the file gets shipped.
+[[doc]]
+path  = "specs/test-vectors/ecf-conformance/CHANGELOG.md"
+title = "ECF Conformance Corpus — Changelog"
+blurb = "What changed in the ECF vector corpus, when, why, and the sha256 of each artifact at every revision."
+group = "Test vectors"
+
 # ── Status ────────────────────────────────────────────────────────────────────
 # NOT DECLARED, deliberately. `docs/status/` publishes nothing ([ADR-0031]) —
 # STATUS.md included, which used to be the one exception. It is public today, so
@@ -101,7 +117,7 @@ group = "Test vectors"
 # its candor is the point, and candor does not survive an audience.
 
 # ── Project files ─────────────────────────────────────────────────────────────
-# These were public at the last release but were never declared, and canon-filter
+# These were public at the last release but were never declared, and this manifest
 # is a KEEP-LIST — so the next release would have DELETED all of them from the
 # public repo. Declaring them is what keeps them. (Found by the arch-tools first
 # full pass, 2026-08-22; the same omission was measured in every repo in the fleet.)

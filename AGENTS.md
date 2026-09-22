@@ -12,6 +12,22 @@ interoperate at the substrate; everything above it (the 22 other extensions, the
 applications, guides) is optional and lives in `entity-system-architecture` — see
 `ROADMAP-CORE-PROTOCOL.md` §"What is NOT core".
 
+**Public surface — what this repo promises to keep.** **IN:** the **normative text** of the three
+specifications in `specs/` — every `MUST` / `MUST NOT` / `SHOULD` / `MAY`, the status codes and
+their `code` strings, the wire field names and their types, the section numbers rules are cited by,
+and the conformance floor (`--profile core`) — plus the **conformance corpora** in
+`specs/test-vectors/`, which are identified by **corpus name + artifact sha256**, never by
+filename. **OUT:** `README.md`, `ROADMAP-CORE-PROTOCOL.md`, everything under `docs/`, the
+informative notes, rationale parentheses and worked examples inside the specs, the `.diag` sources
+(non-normative; the `.cbor` is the artifact), and the file layout of `specs/` itself — a document
+may be renamed, split or retired as long as the normative rules survive at a citable home.
+
+**"Breaking" here is `SPECIFICATION-FORMAT` §9.1's test raised to the release:** a peer conformant
+to the previously published normative text can be non-conformant under this one. **Prose that only
+tells an implementer where a rule already lived is not breaking; a rule that changes what a peer
+must emit, accept, refuse or compute is** — including a `SHOULD` that became a `MUST`, and
+including a rule that was always implied and had no code anyone could find.
+
 The spec text is **normative and upstream**: implementations (`entity-core-{go,rust,py}`,
 the keystone-generated peers) implement it; they do not define it. Per AGENTS-STANDARD
 §"Working across the polyrepo", the spec is upstream — **don't invent wire formats,
@@ -47,15 +63,32 @@ Retirement was decided 2026-08-02 and not executed until it had cost a fold — 
 missing the `invalid_nonce` row entirely and its §6.2 still carrying a blanket `403` the real spec
 corrected two releases earlier. `SPECIFICATION-FORMAT` §8.4.3 already names the class.
 
-- Each spec carries its **own authoritative version header** (`**Version**:`); the per-doc
-  header is the source of truth for that document, not the release tag. (As of this writing:
-  PROTOCOL 0.8.2.1, CBOR-ENCODING 1.5, TYPE-SYSTEM 4.2.1. The two authoring standards
-  carry their own headers in `entity-system-architecture`.)
+- Each spec carries its **own authoritative version header** (`**Version**:`); the per-doc header
+  is the source of truth for that document, not the release tag. ⛔ **Open the header. Never quote
+  a version from memory, from a handoff, or from this file** — a version restated anywhere else
+  ages on the next spec edit and nothing gates it. This bullet used to carry the three numbers and
+  was two releases and thirty-one revisions stale when anyone checked. The two authoring standards
+  carry their own headers in `entity-system-architecture`.
+- ⛔ **Exactly ONE document carries this repo's release number: `ENTITY-CORE-PROTOCOL.md`.**
+  `SPECIFICATION-FORMAT` §9.1 — *"where a document's version carries a trailing component managed
+  separately from its release number — `ENTITY-CORE-PROTOCOL`'s fourth — the arms above apply to
+  that component, and the components above it are not the author's to move."* So **during a cycle
+  you move the fourth component only** (one increment per landed fold), and **the release cut
+  strips it** and writes the new release number in its place. **Landing a fold does not entitle you
+  to pick that release number** — do not pre-write one into the tree. CBOR-ENCODING (`1.x`) and
+  NATIVE-TYPE-SYSTEM (`4.x`) are on **independent axes and must never be dragged to the release
+  number**; they have their own ladders and always have, and §9.1's arms apply to each on its own.
+- **Nothing outside `specs/` restates a version.** `README.md` and `ROADMAP-CORE-PROTOCOL.md` both
+  did, both sat at `0.8.0` through the whole `0.8.2` cycle, and the roadmap's artifacts table
+  published three wrong numbers for a release because a restatement has no owner. They now name the
+  authority instead of copying it. **Do not put a number back into either.**
 - Maturity, the per-artifact source-of-record, and the M0–M6 ladder are tracked in
-  `ROADMAP-CORE-PROTOCOL.md` (canonical, living for this domain), which defers the
-  cross-domain release-surface map to `STATUS-RELEASE-SURFACE-AND-MATURITY-CANONICAL.md`
-  **(that status doc lives in `entity-system-architecture`, not in this repo — it is a
-  cross-domain pointer, not a local file).**
+  `ROADMAP-CORE-PROTOCOL.md` (canonical, living for this domain). ⛔ **It used to defer the
+  cross-domain release-surface map to a document named by filename alone. That document is a
+  sibling repo's working status file, and status files are not a publication surface — so from
+  outside this tree the name resolves to nothing.** The pointer is gone from the roadmap and from
+  `README.md`; if you need that map, it is `entity-system-architecture`'s to hold and yours to go
+  and read there, never to cite as though a reader could follow it.
 - `test-vectors/` is the real contract surface: `.diag` is the human-readable source,
   the sibling `.cbor` is the deterministic ECF-canonical encoding, and bytes MUST match
   the inline `h'...'` canonical values in `.diag` (see
@@ -133,10 +166,19 @@ and AGENTS-STANDARD §"Respect the protocol".
 - `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md` — community health.
 - `LICENSE` (prose), `LICENSE-CODE` (Apache-2.0), `NOTICE` — dual-license files.
 - `AGENTS-STANDARD.md` + `AGENTS.md` + `CLAUDE.md` — agent guidance.
+- `.release-removals` — **published.** The reader-facing record of files that used to be
+  published here and are not any more, and where each one went. Written for a stranger who
+  followed a dead link: no tooling names, no internal paths, no mention of what made you write
+  the entry. Add to it in the same commit that withdraws something.
 
-There is no `Makefile` or source tree here — this is a specification repo. The only
-non-spec tree is `docs/status/`, the ephemeral dated status / handoff area.
+There is no `Makefile` or source tree here — this is a specification repo.
 _(Build/test verbs: not applicable — no toolchain in this repo.)_
+
+**`docs/` is the whole non-spec tree and NONE of it publishes** — `docs/status/` (dated status
+and handoffs), `docs/proposals/` (the fold queue), `docs/archive/` (retired documents, kept so
+an old citation resolves to something with a banner on it). ⛔ **Never send a reader of a
+published file into `docs/`.** They cannot follow it: `README.md` did, for exactly the reader
+holding the stale citation it was trying to help. State the answer inline instead.
 
 ## Commit & PR
 
