@@ -7,6 +7,119 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added — outbound sub-dispatch authorization, and the authority it runs against (0.8.2.17)
+
+**PD-2 lands.** `check_permission` now MUST run **before a locally-originated sub-dispatch leaves the
+peer**, all four dimensions applied, `target_peer = extract_peer(uri, local_peer_id)`. The rule that
+took nine months to state is that *which authority the check runs against* depends on what the
+sub-dispatch spends, and the two cases are different questions:
+
+- **Ambient authority** — no capability presented; the sub-dispatch rides the executing handler's
+  grant. **Dimension 4 binds that grant.** A handler with no `peers` scope cannot reach a foreign
+  peer. This is the confused-deputy ceiling the dimension exists for.
+- **Presented authority** — a capability that is **not** the propagated `caller_capability` but a
+  distinct credential minted **by the target peer** naming **this peer** as `grantee`. **Its own four
+  dimensions authorize the sub-dispatch; the dispatching handler's `peers` scope is not consulted.**
+  The party that decides what may happen at a peer is that peer, and it already has.
+
+The presented arm MUST verify `granter` is the target, `grantee` is the local peer, validity
+(chain-verified, unexpired, unrevoked), and coverage. **A capability failing any of these is not
+presented authority and falls back to the ambient arm.** All four checks already existed; this
+composes them.
+
+**This is disjoint from §6.2's confused-deputy prohibition, not an exception to it.** That rule
+forbids re-spending the *propagated caller capability* at a target the caller chose. Presented
+authority is the opposite shape — minted for this purpose, by the party being accessed. A caller can
+steer the handler only toward peers that have already granted this peer something.
+
+**Two readings were rejected.** Keying the exemption on *the connection the request arrived on* makes
+an authority question turn on a transport predicate, and fails at both edges — a fresh dial back to
+the same peer is the same authority question and would be refused, while reusing an inbound
+connection to reach a **third** peer would be wrongly exempted. Requiring per-connection `peers`
+scopes on handler grants makes a bootstrap-time grant depend on who later connects.
+
+**§9.1 carries the two-arm conformance row**, which is what makes this checkable: the negative arm
+(ambient at a foreign peer → refused) is new and drivable today; the positive arm is already driven.
+
+### Changed — `path_required` is raised by the handler, not the dispatcher (0.8.2.17)
+
+`0.8.2.14` declared the code and stated it was raised *"at dispatch, before the handler runs"* for a
+*"directly-callable"* operation. **The dispatch-level reading is withdrawn: no conformant
+implementation could execute it.** `system/handler/operation-spec` declares `input_type` and
+`output_type` and nothing else, so a dispatcher — which holds the resolved manifest and nothing else
+— has no field against which to decide whether an operation requires a `resource`. §3.2 states the
+complementary rule directly, and the two sections disagreed.
+
+**`path_required` stays a core-declared code** — the condition is core's, since `resource` is a §3.2
+EXECUTE field — and **the raising site is the handler**, with each operation's own specification
+saying whether it requires a `resource`. `EXTENSION-CONTENT` §6.2/§6.3 are the worked examples;
+operations for which no resource is legitimate simply do not carry the requirement. **A manifest
+field declaring the requirement is a coherent design and is a separate, wire-visible proposal** — it
+should be argued on its merits, not landed as a defect fix.
+
+### Fixed — the id-scope pin never reached the pseudocode (0.8.2.16)
+
+§5.2 has said since `0.8.1` that `matches_scope` matches each dimension **by its scope type** —
+`path-scope` (handlers, resources) canonicalized, `id-scope` (operations, peers) compared as literal
+identifiers — and that **"an id dimension canonicalized is a conformance defect."** The id-scope
+pattern grammar paragraph restates it normatively.
+
+**Both normative code blocks did exactly what that prose forbids.** `matches_scope` wrapped value
+and pattern in `canonicalize(…)` unconditionally, in both the include and exclude arms, with no
+scope-type branch anywhere — under a comment reading `; Uniform scope check for all grant
+dimensions`, which is the defect declaring itself. §5.5a's `scope_subset` did the same. Between them
+they are reached by `check_permission`, `check_grant_covers` and `check_path_permission` on
+`operations` and `peers`, and by `grant_subset` on `operations` and `peers` during **delegation** —
+where a child grant wrongly judged a subset of its parent widens authority down a chain nobody
+re-checks.
+
+An implementation reading the prose was conformant; one reading the pseudocode was not, **and the
+pseudocode is what gets transcribed.** The measured instance is a generated peer that failed in both
+directions at once — an `include` over-granted and an `exclude` over-denied — and neither is visible
+while both are present, because they partially mask each other. That is the `ALLOW`-bug class §5.2's
+own parenthetical names.
+
+Both functions now dispatch on the scope entity's own `type`, so no call site changes. The literal
+arm recognizes exactly the two wildcard forms the grammar paragraph allows — bare `*`, and a
+trailing `/*` matching by literal segment-prefix — and applies none of the §5.4 path transforms.
+`scope_subset` additionally rejects a child/parent pair whose scope types differ, which is a
+malformed grant. **No new conformance row: §9.1's F40 row already states the rule.** No wire change.
+
+Found by the enumeration this class earned: **a rule ruled in prose whose normative pseudocode was
+never swept** — the third instance in one week, after `0.8.2.15` and `0.8.2.10`. A code block shares
+none of its rule's vocabulary, so neither a subject enumeration nor a term grep reaches it. The
+sweep that found this one was bounded and complete: **14 `canonicalize` call sites in this
+specification, of which exactly these two were wrong.**
+
+### Fixed — two sections computed a different `system/peer` hash than the type system defines (0.8.2.15)
+
+§3.5 defines `system/peer` as `{public_key, key_type}` and states outright that **`peer_id` MUST NOT
+appear in the hashable basis**; §1's envelope example and §3.5's prose both agree, and both cite the
+revision that moved the field out. **§4.5a item 1a and §4.6's `peer_entity` pseudocode still carried
+the pre-v7.65 shape.**
+
+That is not editorial. `peer_hash` from §4.6 is what goes into `signature.signer`, and the same value
+is a capability's `grantee` and `granter` (§3.6) and the `{peer_id_hex}` path segment. **Two
+implementers, each conformant to a section they read, computed different bytes for one identity**, so
+§5.2's `signer == author` and `grantee == author` equalities — byte-wise by §5.3 — fail across that
+pair at connect, on a correct signature with a correct key.
+
+The retired shape also defeated the property the carrying sections were asserting. §4.5a item 1a pins
+the entity to the ECFv1-SHA-256 floor so the identity hash is *"the same bytes on every connection in
+the network."* A basis containing `peer_id` cannot have that property: §4.5's wire-acceptance
+carve-out lets one key be presented in more than one `peer_id` wire form, so the two forms hash to two
+identities — the second-form manufacture **item 4 of the same section prohibits**. Item 1a's argument
+was sound and its field list contradicted its conclusion; only the field list changed.
+
+**§4.6's `authenticate_entity` is untouched and still carries `{peer_id, public_key, key_type, nonce}`**
+— it is a different type, the challenge payload, and `peer_id` there is a signed assertion of the wire
+form being presented. A comment now says so, because stripping the field from both blocks is the
+obvious wrong sweep.
+
+Also corrected: the crypto-agility `SEEDS.md` restatement. **No wire change and no new requirement** —
+§3.5's `MUST NOT` was already landed; four consumers of it stopped contradicting it. Raised by
+conformance measurement of the connect handshake across a population of independently built peers.
+
 ### Fixed — the default handler grant spans the whole local store, not just the peer's own prefix (0.8.2.3)
 
 `0.8.2.2` pinned the default per-handler self-grant's `resources` to `["/{local_peer_id}/*"]`, reasoning

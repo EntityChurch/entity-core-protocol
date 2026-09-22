@@ -1,6 +1,6 @@
 # Entity Core Protocol — Normative Specification
 
-**Version**: 0.8.2.14
+**Version**: 0.8.2.19
 
 **Status**: Active
 **Supersedes**: ENTITY-CORE-PROTOCOL-V4.md
@@ -309,6 +309,33 @@ All handlers are peer-local. A peer processes only requests targeting itself. Cr
 - On **internal dispatch**, a locally-originated sub-request MAY name a foreign namespace, so `extract_peer(uri, local)` can differ from `local_peer_id`. **This is the class the `peers` dimension exists for**: it scopes which peers a grant may be used *against* on an outbound sub-dispatch, not which peers may call in.
 
 A grant carrying no `peers` scope therefore defaults to `{include: [local_peer_id]}` (§3.6) and is **still checked** — it authorizes sub-dispatch at the local peer's own handlers and nothing further. Implementations MUST NOT conclude from the inbound path's invariant that the dimension is inert and MUST NOT skip the check on an absent `peers` field; doing so authorizes a foreign namespace under a grant nobody scoped for one.
+
+**The enforcement point, and the authority it runs against (normative, 0.8.2.17 — PD-2; corrected 0.8.2.19).** An implementation **MUST** evaluate `check_permission` **before a locally-originated sub-dispatch leaves the peer**, with all four dimensions applied and `target_peer = extract_peer(uri, local_peer_id)`. **There is one gate and one exemption:**
+
+> **The executing handler's grant is the gate, on all four dimensions (§6.8). A valid credential minted by the TARGET peer relaxes Dimension 4 — and only Dimension 4 — to the peers that credential covers, and must additionally authorize the request on its own four dimensions `[MUST]`.** **The target answers *where*; the handler's grant still answers *what*.**
+
+- **Ambient** — no credential is presented, and the handler's grant decides on all four dimensions. A handler whose grant carries no `peers` scope cannot sub-dispatch at a foreign peer, which is the escalation this dimension exists to close: the handler's grant is a **ceiling** a caller must not be able to steer past.
+- **Presented** — a credential that is **not** the propagated `caller_capability` (§6.2) but a distinct capability minted **by the target peer**, naming **this peer** as `grantee`. It relaxes the handler grant's `peers` dimension, because the party that decides what may be done at a peer is that peer and it has already decided; requiring the dispatcher's grant to have anticipated the target asks the wrong party. **It does NOT displace Dimensions 1–3.** Which of this peer's handlers may perform which operation on which resources is the dispatching peer's own compartmentalization, about which the target has no standing to speak.
+
+**The presented credential MUST be verified as follows, or it is forgeable.** Every check already exists; this is a composition, not new machinery. The capability **chain's ROOT** `granter` resolves to the **target peer's** identity (§3.6); the **leaf's** `grantee` resolves to the **local peer's** identity; it is **valid** — not expired, not revoked, chain-verified (§5.5, and §6.2's *Capability validity* rule already binds this at sub-dispatch); and its own `handlers`, `operations`, `peers` and `resources` dimensions authorize the request (§5.2). **A credential failing any of these is not presented authority**, and the sub-dispatch is decided on the handler's grant alone, unrelaxed.
+
+> **Why Dimensions 1–3 stay with the handler `[correction, 0.8.2.19]`.** The `0.8.2.17` wording said the presented capability's *"own four dimensions authorize the sub-dispatch"* while exempting only the handler's `peers` scope by name, and the ambiguity was resolved in practice as a bypass of the whole grant. **§6.8 states the gate unconditionally — *the authorization decision for an internal sub-request is made on the executing handler's grant, never on a propagated caller capability* — and that sentence has two halves.** A target-minted credential is indeed **not** the propagated `caller_capability`, which answers the second half; nothing answers the first. **`EXTENSION-CONTINUATION` §3.6b resolves the identical shape** — a `dispatch_capability` rooted at the target and armed at install by a third party — as a two-level model in which the handler's grant is *Level 1, the dispatch gate* and the credential is *Level 2, the caller capability of the chain*. **A target-minted credential is Level 2.** With the grant bypassed, any handler may spend any target-minted credential that reaches it, bounded only by that credential's dimensions — and where the credential arrives as a **caller-supplied parameter**, a caller holding a copy of any `target → this peer` capability can steer a handler whose grant never contemplated that target. The caller cannot wield it itself, the leaf `grantee` being this peer, **which is the confused-deputy shape with the ceiling removed.** Bounding the *target's* exposure — *only toward peers that already granted this peer something* — is not the same claim as bounding the *handler's* authority.
+
+**`granter` is read at the chain ROOT, `grantee` at the leaf, and the asymmetry is deliberate (0.8.2.18).** *"Minted by the target"* is a property of the chain's origin. A credential the target granted and the holder then **re-attenuated** — the ordinary shape of a cross-peer continuation chain, `EXTENSION-CONTINUATION` §4.2 case 3 — has a leaf whose `granter` is the holder, and it is still a credential the target minted. **Reading `granter` at the leaf accepts only the unattenuated grant and refuses every narrowing of it**, inverting every other attenuation rule here and refusing precisely the credential that spends least. The root reading concedes nothing: §5.5's attenuation walk binds every link, so a leaf can carry only what the target granted the root holder.
+
+**The presented capability is evaluated end to end in the granter's — the target's — frame `[MUST]` (0.8.2.18).** That is the frame the chain verifies in and the frame the credential is answered in on arrival, and it decides more than canonicalization. Evaluated in the **dispatcher's** frame instead, §5.2's Dimension 4 default for an absent `peers` field resolves to `{include: [the dispatcher]}` and is tested against a target that is not the dispatcher — **so the arm refuses every credential it exists to accept**, a target-minted grant ordinarily carrying no `peers` field at all — and §5.5's root-trust rule, *the single-sig root's `granter` must be the local peer*, rejects every target-minted root outright. An implementation that passes its own peer id on this path has an arm that **looks implemented and denies everything**: it satisfies the refusal case and fails the acceptance case, which is why a check set MUST discriminate both (§9.1).
+
+**What the check binds is decided by AUTHORITY PROVENANCE, not by timing `[MUST]` (0.8.2.18, restated 0.8.2.19).** The test is: **does this dispatch spend a handler's grant, or the peer's own root authority?** Every outbound dispatch that spends a handler's grant is in scope. **The common case is a body executing under an inbound EXECUTE; it is not the test**, and stating it as one under-covers. A **timer** registered by handler `H`, a **subscription** delivering a notification, a **continuation** advancing — each spends `H`'s grant whenever it fires, whether or not `H`'s body is on a stack, which is why an implementation keyed on dynamic extent (a thread-local current-grant) gets the caller-directed case right and misses these. `EXTENSION-CONTINUATION` §3.6b states the same thing at its own layer: the advance *is a new chain root*, the continuation having been *armed at install with a stated authority*. **A dispatch that spends no handler's grant — the peer originating as itself — is out of scope**, and this falls out of the same test rather than being an exception to it: there is no delegated authority to confine, a peer originating as itself being the root of its own and able to mint any grant the check would test against, so a sender-side check constrains nothing there while refusing legitimate traffic the target would honor.
+
+**On an outbound sub-dispatch, Dimension 1's handler pattern is the peer-relative path component of the target uri `[MUST]` (0.8.2.18).** A remote peer's handler table is not resolvable from the dispatching peer — that is what makes the dispatch outbound — so the resolved pattern the §6.6 tree walk supplies on a local sub-dispatch does not exist here, and the check §5.2 obliges would otherwise have no defined input. The peer-relative path is the value a grant author writes into a `handlers` scope. **Leaving the substitute to the implementation is a silent-ALLOW divergence**: one that is too permissive passes every probe, because a sub-dispatch that succeeds cannot report that the grant was read too loosely.
+
+**Which frame that peer-relative value canonicalizes in, per arm `[MUST]` (0.8.2.19).** **On the handler's grant, both sides canonicalize in the LOCAL frame** — the grant being evaluated is local, and the target is carried by Dimension 4 alone. **On the presented credential, both sides canonicalize in the target's frame**, per the rule above. Generalizing the presented-arm frame to the handler's grant canonicalizes the value against the target while the grant's own pattern resolves against the local peer, so **Dimension 1 never matches for any foreign target and the gate refuses even a handler legitimately scoped `peers: {include: [target]}`** — the same *looks-implemented-and-denies-everything* failure as passing the local peer id on the presented path, reached from the opposite direction.
+
+**Root granter under multi-signature `[MUST]` (0.8.2.19).** *The chain's ROOT `granter` resolves to the target peer's identity* is undefined when that root is a §3.6 `system/capability/multi-granter`, and M3 makes multi-signature **root-only** — so a K-of-N-rooted credential is exactly where this lands. **Such a credential satisfies the root-granter check only when the target peer's identity is the multi-granter itself; a root whose signer set merely includes the target does not.** A credential that fails this is not presented authority and the sub-dispatch is decided on the handler's grant alone. This is deliberate under-acceptance: a K-of-N root is a *group's* authority, and treating a constituent as the granter would let any one signer's target confer the group's grant.
+
+> **This does not weaken §6.2's confused-deputy prohibition.** That rule forbids falling back to the **propagated caller capability**: the inbound request's authority, re-spent by the deputy at a target the caller chose, where the granter never contemplated this dispatch. A target-minted credential is a different object with a different granter — minted *for this purpose*, by the party being accessed, naming the deputy as grantee — so §6.2's specific prohibition does not reach it. **But that is only half of §6.8, and the half it is not is the operative one:** the authorization decision is made on the executing handler's grant, positively and unconditionally. **The relaxation above is scoped to Dimension 4 for exactly that reason `[0.8.2.19]`.** An earlier wording argued the escalation was *"structurally unavailable — a caller can steer the handler only toward peers that have already granted this peer something, and only within what they granted."* **That bounds the target's exposure, not the handler's authority:** it answers *which peers*, and says nothing about which of this peer's credentials get spent or which handler spends them. Dimensions 1–3 answer that, and they stay with the grant.
+>
+> **Two rejected readings, recorded because each is locally plausible.** Keying the exemption on *"the connection the request arrived on"* makes an **authority** question turn on a **transport** predicate, and it is wrong at both edges — a fresh dial back to the same peer is the identical authority question and would be refused, while reusing an inbound connection to reach a **third** peer would be wrongly exempted. Requiring handler grants to carry a **per-connection `peers` scope** makes a grant minted at bootstrap, before any caller exists, depend on who later connects: a larger mechanism change than the rule it serves.
 
 **Path rules.** Paths are UTF-8 strings. Two characters are reserved:
 
@@ -829,7 +856,7 @@ Status codes:
 |------|---------|
 | 200 | Success |
 | 207 | Partial success — binding committed but cascade halted. See SYSTEM-COMPOSITION.md §2.7A for the `system/tree/partial-result` response envelope. |
-| 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`, `path_required`. **`path_required`** is raised when a **directly-callable** op is invoked with no `resource` (§3.2). It is raised **at dispatch, before the handler runs**, which is why it is available to every handler and is declared here rather than in any one handler's code set; it is **not** a synonym for `invalid_request`, because the remedy differs — *supply a resource* is a different instruction from *fix your request*, and the code is what selects it (0.8.2.14). `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
+| 400 | Bad request — malformed, mis-addressed, or otherwise structurally invalid. Default `code` = **`invalid_request`**; more-specific 400 codes where one applies: `invalid_path`, `invalid_params`, `unexpected_params`, `chain_depth_exceeded`, `signature_path_conflict`, `path_required`. **`path_required`** is raised when an operation **whose own specification requires a `resource`** is invoked without one. It is **declared here, and raised by the handler** — it is core's code because the *condition* is core's (`resource` is a §3.2 EXECUTE field, not any handler's invention), and it is available to every handler for that reason; it is **not** a synonym for `invalid_request`, because the remedy differs — *supply a resource* is a different instruction from *fix your request*, and the code is what selects it (0.8.2.14). ***Which* operations require one is stated by each operation's own specification** — `EXTENSION-CONTENT` §6.2/§6.3 are the worked examples — and an operation that **targets no entity binding** carries no requirement: `system/quorum:verify` takes both operands in `params` and binds nothing, so a `resource` would have nothing to name. *(The test is whether the operation targets a binding, not whether it is configuration-shaped: an operation that writes or reads at a path derived from `EXECUTE.resource.targets[0]` requires a resource however administrative it looks.)* **An operation that requires a resource answers ABSENT with `path_required` and MORE THAN ONE with `ambiguous_resource` (0.8.2.18)** — the two are different inputs with different remedies, and this row's whole reason for existing is that the code selects the remedy. **A handler specification that collapses them into one code is non-conformant on the absent case**; stating the general form here means the next one does not re-derive it. *(0.8.2.17 — a dispatch-level reading of this row is **withdrawn**. It required the dispatcher to identify which operations need a `resource`, and `system/handler/operation-spec` declares only `input_type` and `output_type` — so a dispatcher, which resolves the manifest and nothing else, has no field to read. §3.2 states the complementary rule: an absent `resource` means no resource check at dispatch, and the handler may check internally. A manifest field declaring the requirement is a coherent design and is a separate, wire-visible proposal.)* `invalid_request` is the code for an inbound EXECUTE naming a non-local namespace (§1.4, §6.5 step 3) and is the generic 400 code an extension handler uses for a structurally invalid request. |
 | 401 | Authentication failed (also: `capability_revoked` per `EXTENSION-ROLE.md` §5.5; `unresolvable_grantee` per §5.5 of this doc — cap's `grantee` does not resolve to a present `system/peer` entity) |
 | 403 | Forbidden — request-time authorization DENY (§5.2). Default `code` = `capability_denied`; more-specific authorization codes: `scope_exceeds_authority` (capability handler request subset-validation, §6.2). See §5.2 verdict-to-status mapping. |
 | 404 | Not found. Default `code` = **`handler_not_found`** — no handler is registered at the resolved path (§6.5), **on a path that targets the local peer**. §6.2 is the defining home for this code and this row is its restatement. Distinct from 501, where a handler IS registered and the named operation is not implemented; distinct also from a 404 raised **inside** a registered handler because the requested entity, binding or hash is absent — that is a domain outcome carrying the domain's own code, not this row (0.8.2.7). A path targeting a foreign namespace is neither: it is refused at canonicalization with `400 invalid_request` (§1.4, §5.2a, §6.5 step 3). |
@@ -1829,7 +1856,7 @@ The `hash_formats` negotiation (§4.5) selects one **active `content_hash_format
 
 1. Every entity a peer authors **on the wire/identity surface** for transmission on this connection — the EXECUTE and EXECUTE_RESPONSE envelope framing, the capabilities it mints for this connection, and signatures — MUST be content-hashed under the active format. This is the surface where identity-equality (`grantee == author`, `signer == author`; §5.2) is evaluated; keeping it single-format per connection is what makes that equality byte-exact.
 
-   **1a. Exception — the `system/peer` identity entity is pinned to the floor (normative, v7.77).** The identity entity a peer presents (§4.6's `peer_entity`) is authored under **ECFv1-SHA-256 (`0x00`) unconditionally** — on every connection, whatever the active format, and whatever the peer's home format. It is the one entity on this surface with **no author-chosen content**: its data is `{peer_id, public_key, key_type}`, wholly recoverable from the public peer-id, so every consumer *derives* its hash rather than fetching it — a `[derive-to-meet]` value by `SPECIFICATION-FORMAT` §8.4.6 (`entity-system-architecture`)'s test. Pinning it does not weaken this item's purpose, it **over-satisfies** it: the identity hash becomes the same bytes on every connection in the network rather than merely within one, so `signature.signer`, cap `grantee`/`granter`, and the `{peer_id_hex}` path segment are **one value** instead of two that coincide only while the active format happens to be the floor. This is the single exception to §1.2's "a peer's persistent state is uniformly its home format" — a non-floor-home peer stores its own `system/peer` entity at its floor hash, and nothing else changes.
+   **1a. Exception — the `system/peer` identity entity is pinned to the floor (normative, v7.77).** The identity entity a peer presents (§4.6's `peer_entity`) is authored under **ECFv1-SHA-256 (`0x00`) unconditionally** — on every connection, whatever the active format, and whatever the peer's home format. It is the one entity on this surface with **no author-chosen content**: its data is `{public_key, key_type}` (§3.5 — `peer_id` is **not** in the hashable basis), wholly recoverable from the public peer-id, so every consumer *derives* its hash rather than fetching it — a `[derive-to-meet]` value by `SPECIFICATION-FORMAT` §8.4.6 (`entity-system-architecture`)'s test. Pinning it does not weaken this item's purpose, it **over-satisfies** it: the identity hash becomes the same bytes on every connection in the network rather than merely within one, so `signature.signer`, cap `grantee`/`granter`, and the `{peer_id_hex}` path segment are **one value** instead of two that coincide only while the active format happens to be the floor. This is the single exception to §1.2's "a peer's persistent state is uniformly its home format" — a non-floor-home peer stores its own `system/peer` entity at its floor hash, and nothing else changes.
 2. A peer MUST NOT author a **wire/identity-surface** entity under a format outside the negotiated active value. **Content entities** (handler-produced results, stored data, tree nodes, async-delivery and subscription-notification bodies) are NOT required to be re-authored under the active format — they carry their own home-format (§1.2) `content_hash` and travel self-describing; the receiver validates them by their declared format byte. When the sender's home format differs from the connection active format, such content does not converge with the receiver's same-logical-input content (the §1.2 / §1.5 two-address-space case); this is expected, not an error.
 3. **Relay carve-out.** An entity a peer *received earlier* under a different format and is merely *relaying* by reference follows §1.8 fidelity — it is forwarded as its original bytes, never re-authored. Relaying such a reference *across a connection whose active format differs* is the cross-content-address-space case, out of v1 scope per §1.5 (a translator handler's concern, not core's).
 4. Consequently, **within a single connection there is exactly one `content_hash_format` in play** for authored traffic, and identity-equality comparisons (`grantee == author`, `signer == author`; §5.2) remain correct as byte-wise hash equality (§5.3). A peer MUST NOT re-derive a *received* identity's `content_hash` under a different (e.g. its own preferred) format in order to construct a reference to that identity — doing so manufactures a second form and breaks the equality (§1.8). **With item 1a in force this holds across connections, not only within one:** an identity reference derived at the floor and one read off the wire are the same bytes, so the prohibition and the derivation can no longer disagree. An implementation that derives an identity hash for a path segment and compares an authored identity hash for an equality check is using **one** function, and that is the conformant shape — two functions is the defect item 1a exists to prevent.
@@ -1850,9 +1877,13 @@ authenticate_entity = Entity {
 authenticate_hash = content_hash(authenticate_entity)
 
 ; Construct peer entity (the signer's peer)
+; NOTE: peer_id is NOT in this entity's hashable basis (§3.5). The authenticate
+; entity above carries it — that is the wire form being asserted — but system/peer
+; does not, so content_hash(peer_entity) is invariant under wire-form peer_id
+; choice and every consumer derives the same bytes (§3.5, §4.5a item 1a).
 peer_entity = Entity {
   type: "system/peer",
-  data: { peer_id, public_key, key_type }
+  data: { public_key, key_type }
 }
 peer_hash = content_hash(peer_entity)
 
@@ -2166,21 +2197,44 @@ find_signature_by_signer(target_hash, signer_id, included):
   return null
 
 matches_scope(value, scope, local_peer_id):
-  ; Uniform scope check for all grant dimensions.
-  ; Returns true if `value` is included and not excluded by `scope`.
+  ; Scope check for a grant dimension. Returns true if `value` is included
+  ; and not excluded by `scope`.
+  ;
+  ; DISPATCHES ON THE SCOPE'S TYPE (0.8.1 F40; pseudocode corrected 0.8.2.16).
+  ; This is NOT a uniform check across dimensions: a path dimension matched
+  ; literally, or an id dimension canonicalized, is a conformance defect
+  ; (§5.2 "Scope types"). The scope entity carries its own type, so no call
+  ; site needs to supply it.
+  ;
+  ;   system/capability/path-scope  (handlers, resources) -> canonicalize
+  ;   system/capability/id-scope    (operations, peers)   -> literal match
   matched = false
   for pattern in scope.include:
-    if matches_pattern(canonicalize(value, local_peer_id),
-                       canonicalize(pattern, local_peer_id)):
+    if scope_value_matches(value, pattern, scope.type, local_peer_id):
       matched = true
       break
   if not matched: return false
   if scope.exclude is not null:
     for pattern in scope.exclude:
-      if matches_pattern(canonicalize(value, local_peer_id),
-                         canonicalize(pattern, local_peer_id)):
+      if scope_value_matches(value, pattern, scope.type, local_peer_id):
         return false
   return true
+
+scope_value_matches(value, pattern, scope_type, local_peer_id):
+  ; The one place the two scope types differ. Both arms are specified in
+  ; §5.2 ("Scope types" and "id-scope pattern grammar"); this transcribes them.
+  if scope_type == "system/capability/id-scope":
+    ; Literal identifier match. MUST NOT apply the §5.4 path transforms:
+    ; no leading-`/` universal-scope reading, no `/*/` interior peer-wildcard,
+    ; no peer-relative -> /{local_peer_id}/... qualification. Exactly two
+    ; wildcard forms are recognized.
+    if pattern == "*": return true
+    if ends_with(pattern, "/*"):
+      return starts_with(value, strip_suffix(pattern, "*"))   ; literal segment-prefix
+    return value == pattern
+  ; path-scope: canonicalize both sides, then pattern-match (§1.4, §5.4).
+  return matches_pattern(canonicalize(value, local_peer_id),
+                         canonicalize(pattern, local_peer_id))
 
 check_permission(execute, capability, handler_pattern, local_peer_id):
   ; Called after handler resolution (§6.5). Checks whether the capability
@@ -2915,24 +2969,44 @@ grant_subset(child_grant, parent_grant, local_peer_id):
   return true
 
 scope_subset(child_scope, parent_scope, local_peer_id):
+  ; DISPATCHES ON SCOPE TYPE, exactly as matches_scope does and for the same
+  ; reason (§5.2 "Scope types"; pseudocode corrected 0.8.2.16). This function
+  ; is called on `operations` and `peers` — both id-scope — as well as on
+  ; `handlers` and `resources`. Canonicalizing an id dimension here widens
+  ; authority DOWN A DELEGATION CHAIN, which is where nobody re-checks.
+  ;
+  ; Both scopes are the same dimension, so they carry the same type; a child
+  ; and parent whose types differ is a malformed grant and MUST be rejected.
+  if child_scope.type != parent_scope.type: return false
+  st = child_scope.type
+
   ; Every child include pattern must be covered by some parent include
   for child_pattern in child_scope.include:
-    cc = canonicalize(child_pattern, local_peer_id)
-    if not any(matches_pattern(cc, canonicalize(pp, local_peer_id))
+    if not any(pattern_covers(pp, child_pattern, st, local_peer_id)
                for pp in parent_scope.include):
       return false
   ; Child must inherit all parent excludes
   if parent_scope.exclude is not null:
     for parent_ex in parent_scope.exclude:
-      cp = canonicalize(parent_ex, local_peer_id)
       child_has = false
       if child_scope.exclude is not null:
         for child_ex in child_scope.exclude:
-          if matches_pattern(cp, canonicalize(child_ex, local_peer_id)):
+          if pattern_covers(child_ex, parent_ex, st, local_peer_id):
             child_has = true
             break
       if not child_has: return false
   return true
+
+pattern_covers(outer, inner, scope_type, local_peer_id):
+  ; Does `outer` authorize at least everything `inner` does? Same type split
+  ; as scope_value_matches (§5.2), applied to a pattern rather than a value.
+  if scope_type == "system/capability/id-scope":
+    if outer == "*": return true
+    if ends_with(outer, "/*"):
+      return starts_with(inner, strip_suffix(outer, "*"))
+    return inner == outer          ; literal identifiers; no path transforms
+  return matches_pattern(canonicalize(inner, local_peer_id),
+                         canonicalize(outer, local_peer_id))
 ```
 
 **Constraints and allowances.** Grant entries have two domain-specific fields with opposite semantics:
@@ -3176,7 +3250,7 @@ The `unregister` operation reverses all five steps; the grant-signature at `syst
 
 **Behavioral presence is normative** (v7.74 §6.13(a)). A peer claiming `--profile core` (§9.0) MUST execute the five writes above when `register` is invoked; returning `501 unsupported_operation` for `register` or `unregister` is non-conformant. The §9.5 type-floor publication of `register-request` / `register-result` is necessary but not sufficient — the operation's behavioral presence (not just the vocabulary) is the conformance contract.
 
-**Resource carries the install path (§3.2 path-as-resource).** Both `register` and `unregister` derive the pattern from `EXECUTE.resource.targets[0]` (`system/handler/{pattern}`). The handler path is the caller's authorization target — the standard dispatch capability check on `resource` validates that the caller may install/remove a handler at that path. The handler MUST require exactly one resource target and reject anything else with **400 `ambiguous_resource`**. Example: `EXECUTE system/handler operation: "register" resource: {targets: ["system/handler/local/files"]} params: <register-request>`.
+**Resource carries the install path (§3.2 path-as-resource).** Both `register` and `unregister` derive the pattern from `EXECUTE.resource.targets[0]` (`system/handler/{pattern}`). The handler path is the caller's authorization target — the standard dispatch capability check on `resource` validates that the caller may install/remove a handler at that path. The handler MUST require exactly one resource target: **more than one** target is rejected with **400 `ambiguous_resource`**, and **zero** targets — an absent or empty `resource` — with **400 `path_required`** (0.8.2.18, per §3.3's 400 row; the two inputs have different remedies and the earlier wording collapsed them). Example: `EXECUTE system/handler operation: "register" resource: {targets: ["system/handler/local/files"]} params: <register-request>`.
 
 `unregister` has no params content beyond the resource — the pattern lives entirely in resource. Callers send the empty-params shape per §3.2.
 
@@ -3351,7 +3425,7 @@ grant_scope = manifest.data.requested_scope
 
 **Why `resources` spans namespaces while `peers` does not — read this before narrowing it.** The two dimensions are orthogonal and bound different things (§6.3). A peer's store is **one local address space keyed by peer id** (§1.4): `/{remote_peer_id}/…` names a **local** region holding that peer's cached or mirrored data, and writing there is a local write, **not a remote reach**. §6.3 says so in terms — *"a grant with `peers` absent (defaulting to local peer only) authorizes operations on the local peer, but may include resource paths like `/{remote_peer_id}/data/*` for cached copies."*
 
-So the network bound is carried entirely by **`peers`**, which is omitted here and therefore defaults to `{include: [local_peer_id]}` and **is still checked** (§5.2 Dimension 4). A default-scope handler consequently **cannot** dispatch at a foreign peer, which is the escalation that matters. Narrowing `resources` to `/{local_peer_id}/*` closes **no** hole that `peers` does not already close, and it **breaks a legitimate and common case**: a handler that declares no `internal_scope` and sub-dispatches `system/tree:put` at `/{them}/…` — writing a follow-mirror or caching a foreign content site into its own store. Because the handler grant is the §5.2 Dimension 3 **ceiling** on the in-process sub-dispatch path, narrowing the default narrows that ceiling and returns `403` for those writes.
+So the network bound is carried entirely by **`peers`**, which is omitted here and therefore defaults to `{include: [local_peer_id]}` and **is still checked** (§5.2 Dimension 4). A default-scope handler consequently **cannot** dispatch at a foreign peer **on its own ambient authority**, which is the escalation that matters. *(It may still do so by presenting a capability the target peer minted naming this peer as grantee — a different authority, verified on its own terms. §1.4's* **The enforcement point, and the authority it runs against** *states the rule and the enforcement point; this paragraph states the default's effect, not the whole of Dimension 4.)* Narrowing `resources` to `/{local_peer_id}/*` closes **no** hole that `peers` does not already close, and it **breaks a legitimate and common case**: a handler that declares no `internal_scope` and sub-dispatches `system/tree:put` at `/{them}/…` — writing a follow-mirror or caching a foreign content site into its own store. Because the handler grant is the §5.2 Dimension 3 **ceiling** on the in-process sub-dispatch path, narrowing the default narrows that ceiling and returns `403` for those writes.
 
 **`peers: ["*"]` is specifically wrong** and is the one direction that must not be widened — it would authorize sub-dispatch at *foreign peers'* handlers under a grant nobody minted for that purpose, undoing the dimension §5.2 Dimension 4 exists to close.
 
@@ -3561,6 +3635,10 @@ Connection pre-authorization is the sole dispatch special case. All other inboun
 **Step 3 is a gate, not an ordering preference (0.8.2.2).** The peer-ID check is step **3 of 8** and precedes handler resolution, so a foreign-namespace URI is refused *as an address* and never becomes an authorization question. Two consequences implementations MUST observe: an implementation MUST NOT reach the same refusal by stripping the foreign peer ID, resolving the local handler at the remaining path, and relying on §5.2 Dimension 4 to deny — that path returns `403`/`404` for what is specified as `400`, and it **allows** the request outright whenever the presented grant happens to carry a matching `peers` scope, which is a foreign-namespace privilege escalation. And because this step guarantees `target_peer == local_peer_id` downstream on the inbound path, Dimension 4's work is done on §1.4's **internal-dispatch** class, not here (§1.4, §3.6).
 
 **Envelope.included signature ingestion (normative, dispatcher-level).** After the included-entity hash validation step in the dispatch chain above (and before handler resolution), implementations MUST ingest signature entities from `envelope.included` and bind them at the invariant pointer paths so subsequent handler validation can find them via tree lookup.
+
+**Ingestion binds ANY received envelope carrying an `included` map — it is a property of the envelope, not of a surface `[MUST]` (0.8.2.18, generalized 0.8.2.19).** Implementations MUST run this same algorithm, with the same idempotency and the same `signature_path_conflict` semantics, over the `included` map of **every envelope they receive**: an inbound EXECUTE, the **connect/authenticate response** a dialer receives, an **`EXECUTE_RESPONSE`** — notably the `request`/`delegate` result, which §6.2 requires to carry the issued token, its signature at the §3.5 invariant-pointer path, and the granter identity — and async-delivery and subscription-notification envelopes, which are the same shape.
+
+**Why this is stated as an invariant rather than a list of surfaces.** A signature that arrives unbound is unreachable to chain-bundle collection, which resolves signatures solely through the §3.5 invariant pointer — so **every chain rooted at that grant is unverifiable locally**, while remaining perfectly verifiable at the issuer, where its own signature is bound. That is why the gap is invisible until a peer must verify a target-minted credential *locally* — a presented-authority sub-dispatch (§1.4) on an **attenuated** chain — where it presents as a missing root signature and reads as a capability defect. **§5's chain-participating rule already requires such a signature to be discoverable at the invariant pointer path**, and confining ingestion to one surface at a time leaves the only mechanism that puts it there unreachable everywhere else. **Two surfaces were enumerated one at a time, each after a failure** — and §5.1's own `v7.44` paragraph asserts the receive case is already handled *"via envelope ingest"*, a sentence that was false for the connect response and would have stayed false for `EXECUTE_RESPONSE`. **The deliberate way to acquire a target-minted credential is `request`/`delegate`** (§6.2, *"the runtime entry point for in-band capability management, while §4.4 covers initial-grant delivery"*), so the carrier a presented-authority sub-dispatch depends on most was the one still unbound.
 
 Algorithm:
 
@@ -4240,6 +4318,8 @@ A peer claims a **conformance profile** when it presents itself to a conformance
 - Hash comparison by byte equality (§5.3)
 - Signature target-matching verification (§5.2)
 - Capability verification algorithm (§5.2)
+- **Outbound sub-dispatch authorization (§1.4, 0.8.2.17 — PD-2).** `check_permission` runs before a locally-originated sub-dispatch leaves the peer, all four dimensions applied, `target_peer = extract_peer(uri, local_peer_id)`. **Two arms, and a check set MUST discriminate them:** a sub-dispatch on **ambient** authority at a foreign peer is **refused** when the executing handler's grant carries no matching `peers` scope; a sub-dispatch presenting a capability **minted by the target peer naming this peer as `grantee`**, valid and covering the request, is **authorized on that capability's dimensions** and the handler's `peers` scope is not consulted. The presented arm MUST verify granter, grantee, validity and coverage — a capability failing any of those is not presented authority and falls to the ambient arm. **Corrected at 0.8.2.19 to ONE gate and ONE exemption:** the executing handler's grant decides on all four dimensions (§6.8), and a valid target-minted credential relaxes **Dimension 4 only** — the target answers *where*, the handler's grant still answers *what*; it does **not** displace Dimensions 1-3. **The bindings the gate needs:** `granter` read at the chain **ROOT** and `grantee` at the **leaf** (a multi-granter root satisfies it only when the target IS the multi-granter); the presented credential evaluated in the **target's** frame and the handler's grant in the **local** frame; Dimension 1's handler pattern the target uri's **peer-relative path**; and scope decided by **authority provenance** — every dispatch that spends a handler's grant, autonomous origination included, and not one that spends the peer's own root authority
+- **Envelope-`included` signature ingestion on ANY received envelope (§6.5, 0.8.2.19).** Signature entities are bound at the §3.5 invariant pointer path from the `included` map of every envelope the peer receives — inbound EXECUTE, connect/authenticate response, `EXECUTE_RESPONSE` (notably the §6.2 `request`/`delegate` result), and async-delivery envelopes. A capability whose signature is only held in memory leaves every chain rooted at it unverifiable locally, and the gap is invisible until a presented-authority sub-dispatch (§1.4) must verify an attenuated chain
 - Pattern matching and scope checking via `matches_scope` (§5.2, §5.4)
 - Dispatch-level resource authorization via `check_resource_scope` when `resource` is present (§5.2) — full scope checking: effective target scope (targets minus caller excludes) within effective grant scope (includes minus grant excludes)
 - Structured grant attenuation: handlers, operations, resources, peers scope subset checks; constraint key retention + byte equality; allowance key containment + byte equality (§5.6)
