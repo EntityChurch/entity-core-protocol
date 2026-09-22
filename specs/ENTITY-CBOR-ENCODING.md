@@ -1,6 +1,6 @@
 # Entity CBOR Encoding Specification
 
-**Version**: 1.7
+**Version**: 1.8
 **Status**: Active
 
 This specification defines the encoding format for the Entity Core Protocol. All compliant implementations MUST follow this specification to ensure interoperability.
@@ -177,7 +177,7 @@ ECF is the deterministic encoding used for computing content hashes. All impleme
 
 ### 4.1 Canonical Encoding Rules
 
-Per RFC 8949 Section 4.2, with Entity-specific clarifications:
+Per RFC 8949 Section 4.2, with Entity-specific clarifications. **Where the RFC offers alternatives this specification chooses one**, and Rule 2 is the case that matters: the ordering is RFC 8949 §4.2.3 length-first, never RFC 8949 §4.2.1 bytewise.
 
 **Rule 1: Minimal integer encoding**
 ```
@@ -186,6 +186,9 @@ WRONG: 18 01     # Value 1 with unnecessary length byte
 ```
 
 **Rule 2: Map keys sorted by encoded length, then lexicographically**
+
+> **This is RFC 8949 §4.2.3 (*Length-First Map Key Ordering*), not RFC 8949 §4.2.1.** RFC 8949 §4.2.1's core deterministic requirement sorts keys in the *bytewise* lexicographic order of their encodings, with no length precedence, and **this corpus does not use it.** `ENTITY-CORE-PROTOCOL.md` §1.3 is the normative home of the ordering; this rule is its encoding-side restatement. The two orderings coincide for pure text keys and diverge for keys of different CBOR major types. ⚠ **Check which ordering your CBOR library's "canonical" mode implements — they differ, and the difference is invisible until a mixed-type key appears.** A library implementing RFC 7049 canonical form sorts length-first and agrees with this rule; one implementing RFC 8949 §4.2.1's core deterministic requirement sorts bytewise and does not. Python `cbor2`'s `canonical=True` has been measured against the discriminating pair below and is **length-first**, so it conforms; that is one library and is not a statement about any other. *(v1.8 — this section's header and Appendix E's `map_keys` cell both cited RFC 8949 §4.2.1 while every normative home in the corpus states length-first. Reported as `F22`.)*
+
 ```
 Input:  {"bb": 1, "a": 2, "ccc": 3}
 
@@ -287,24 +290,34 @@ Hash: SHA-256(ecf_bytes) → "ecfv1-sha256:9f2c..."
 
 Content hashes encode BOTH the encoding format and hash algorithm. This enables protocol evolution without breaking existing content.
 
-**Format Registry:**
+> **`ENTITY-CORE-PROTOCOL.md` §1.2 is the single normative home of the `content_hash_format` registry.** It owns the allocation set, each code's validation state, and the `(format_code, digest)` address-space semantics. The table below is a **restatement** for the encoding-side reader and is not an independent registry; where the two differ, §1.2 governs and this section is the defect.
+
+**Format Registry** (restated from `ENTITY-CORE-PROTOCOL.md` §1.2):
 
 | Code | Name | Encoding | Algorithm | Digest Size | Status |
 |------|------|----------|-----------|-------------|--------|
-| 0x00 | ecfv1-sha256 | ECF v1 | SHA-256 | 32 bytes | **Active (Required)** |
-| 0x01 | ecfv1-sha384 | ECF v1 | SHA-384 | 48 bytes | Reserved |
+| 0x00 | ecfv1-sha256 | ECF v1 | SHA-256 | 32 bytes | **Production (Required)** |
+| 0x01 | ecfv1-sha384 | ECF v1 | SHA-384 | 48 bytes | **Validated** (cross-impl byte-equal) |
 | 0x02 | ecfv1-sha512 | ECF v1 | SHA-512 | 64 bytes | Reserved |
-| 0x03 | ecfv1-sha3-256 | ECF v1 | SHA3-256 | 32 bytes | Reserved |
-| 0x04 | ecfv1-blake3 | ECF v1 | BLAKE3 | 32 bytes | Reserved |
-| 0x10-0x1F | ecf2-* | ECF v2 | varies | varies | Reserved (future encoding) |
-| 0xFE | (private) | varies | varies | varies | Application-specific |
-| 0xFF | (extension) | - | - | - | Future expansion |
+| 0x03 | ecfv1-blake3 | ECF v1 | BLAKE3-256 | 32 bytes | Allocated; cross-impl validation deferred |
+| 0x04 | ecfv1-sha3-256 | ECF v1 | SHA3-256 | 32 bytes | Reserved |
+| 0x05 | ecfv1-sha3-512 | ECF v1 | SHA3-512 | 64 bytes | Reserved |
+| 0x06 | ecfv1-blake2b-256 | ECF v1 | BLAKE2b-256 | 32 bytes | Reserved |
+| 0x07 | ecfv1-blake2b-512 | ECF v1 | BLAKE2b-512 | 64 bytes | Reserved |
+| 0x08 | ecfv1-shake128-256 | ECF v1 | SHAKE128-256 | 32 bytes | Reserved |
+| 0x09 | ecfv1-k12 | ECF v1 | KangarooTwelve | variable | Reserved |
+| 0x0A-0xEF | — | — | — | — | Reserved (future) |
+| 0xF0-0xFD | — | — | — | — | Experimental range |
+| 0xFE | — | — | — | — | Reserved (mirror of `key_type` experimental slot) |
+| 0xFF | — | — | — | — | **Never allocatable** — see below |
 
 **Format code semantics:**
-- Codes 0x00-0x0F: ECF v1 with various hash algorithms
-- Codes 0x10-0x1F: Reserved for ECF v2 (if encoding rules ever change)
-- Code 0xFE: Private use for application-specific formats
-- Code 0xFF: Reserved for extension mechanism if >254 formats needed
+- Allocation is `ENTITY-CORE-PROTOCOL.md` §1.2's. A new code is allocated there and restated here.
+- Codes are **multicodec-style LEB128 varints** (§4.5), not fixed-width octets. Codes 0–127 encode as one byte; codes ≥ 128 extend to two or more.
+- **Code 0xFF is never allocatable on this axis.** A `0xFF` byte has its LEB128 continuation bit set, so it can never be a complete single-byte varint. `ENTITY-CORE-PROTOCOL.md` §1.2 states this reservation on the `content_hash_format` axis and §1.5 on the `key_type` axis.
+- There is **no escape-hatch code and none is needed**: the varint encoding extends past 0x7F without a wire-format break, so the allocation space is not bounded at 254.
+
+*(v1.8 — this table transposed `0x03` and `0x04` against `ENTITY-CORE-PROTOCOL.md` §1.2, marked `0x01` Reserved after it had been cross-impl validated, omitted `0x05`–`0x09` and the experimental range, and reserved `0xFF` "for an extension mechanism if >254 formats needed". That escape hatch is only coherent for a fixed one-byte field, which is the tell: this table and §4.5's `OCTET` grammar were one artifact of the design that preceded the varint reframing, and the transposition rode along with it. Reported as `F20`, with the consequence stated precisely — a peer advertising `"ecfv1-blake3"` hashes under a different code depending on which document it read. Latent rather than live: `0x00` is the only production code and both transposed codes are pre-production.)*
 
 ### 4.4 Hash String Representation
 
@@ -318,13 +331,16 @@ ecfv1-sha256:7a3b9c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890
 **Grammar:**
 ```
 hash        = format-name ":" hex-digest
-format-name = "ecfv1-sha256"      ; code 0x00 (required)
-            / "ecfv1-sha384"      ; code 0x01 (reserved)
+format-name = "ecfv1-sha256"      ; code 0x00 (production)
+            / "ecfv1-sha384"      ; code 0x01 (validated)
             / "ecfv1-sha512"      ; code 0x02 (reserved)
-            / "ecfv1-sha3-256"    ; code 0x03 (reserved)
-            / "ecfv1-blake3"      ; code 0x04 (reserved)
+            / "ecfv1-blake3"      ; code 0x03 (allocated)
+            / "ecfv1-sha3-256"    ; code 0x04 (reserved)
+            ; further names per ENTITY-CORE-PROTOCOL.md §1.2 and §8.2
 hex-digest  = 1*HEXDIG          ; length must match format
 ```
+
+> **The name-to-code mapping is `ENTITY-CORE-PROTOCOL.md` §1.2's**, restated here and in §8.2 of that document. *(v1.8 — this grammar carried §4.3's `0x03`/`0x04` transposition, so the corpus bound `"ecfv1-blake3"` to two different codes in two documents. It is the string surface, which is where the divergence becomes observable between peers.)*
 
 The `ecfv1-sha256:` prefix explicitly encodes both the canonical encoding format (ECF) and the hash algorithm (SHA-256), enabling future protocol evolution.
 
@@ -334,13 +350,17 @@ In CBOR wire format, hashes are encoded as byte strings with a format code prefi
 
 ```
 hash-bytes = format-code digest
-format-code = OCTET              ; see registry (§4.3)
+format-code = VARINT             ; multicodec-style LEB128; see registry (§4.3)
 digest = *OCTET                  ; length determined by format
 ```
 
+**The format code is a multicodec-style LEB128 varint, never a fixed octet (normative).** Codes 0–127 encode as a single byte with no continuation bit set; codes ≥ 128 extend to two or more bytes, the continuation bit set on each non-final byte. Every currently allocated code is below 0x80, so its on-wire encoding is byte-for-byte identical to a one-byte fixed-width field — but a decoder MUST read the leading bytes as a varint, because a code beyond 0x7F is a normal multi-byte sequence and not an error. `ENTITY-CORE-PROTOCOL.md` §7.3 is the normative home of the varint encoding and §1.2 of the registry it indexes.
+
+*(v1.8 — this grammar read `format-code = OCTET`, the fixed-width form that preceded the varint reframing. Appendix E, which is this specification's own normative conformance contract, already required the varint reading and mandates a vector with `format_code ≥ 0x80` — a value an `OCTET` grammar cannot express — so the document contradicted itself and the half that is executable was the correct one. Reported as the second half of `F20`.)*
+
 **Example (ecfv1-sha256):**
 ```cbor
-; 33 bytes total under SHA-256: 1 byte code + 32 bytes digest
+; 33 bytes total under SHA-256: 1-byte format code + 32-byte digest
 h'00 7a3b9c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890'
  │  └──────────────────────────────┬─────────────────────────────────┘
  │                               Digest (32 bytes)
@@ -360,8 +380,8 @@ wire_to_string(h'00 7a3b9c...'):
 
 The format registry enables protocol evolution:
 
-1. **New hash algorithm:** Add code (e.g., 0x04 for BLAKE3)
-2. **New encoding format:** Reserve code range (e.g., 0x10-0x1F for ECF v2)
+1. **New hash algorithm:** Allocate a code in `ENTITY-CORE-PROTOCOL.md` §1.2 (e.g., 0x03 for BLAKE3-256) and restate it in §4.3
+2. **New encoding format:** Reserve a code range in `ENTITY-CORE-PROTOCOL.md` §1.2's `0x0A-0xEF` future block
 3. **Peers advertise capabilities:** `hash_formats` field in HELLO
 4. **Content remains addressable:** Old hashes continue to work
 
@@ -591,8 +611,8 @@ null
 
 ```
 ; Content hash - see §4.5 for wire encoding
-hash-bytes = bytes              ; Wire format: format-code (1 byte) + digest (32 bytes)
-hash-string = text              ; Display format: "ecfv1-sha256:<64 hex chars>" (for logs/UI only)
+hash-bytes = bytes              ; Wire format: varint(format-code) + digest; widths per §4.5
+hash-string = text              ; Display format: "<format-name>:<hex digest>" (for logs/UI only)
 
 ; Entity URI
 entity-uri = text               ; Format: "entity://<peer-id>/<path>"
@@ -828,20 +848,28 @@ Encoders MUST:
 ### 9.2 Decoder Requirements
 
 Decoders MUST:
-1. Accept any valid CBOR (not just deterministic)
-2. Preserve unknown tags
-3. Preserve additional map properties
+1. **Refuse, at the boundary, any frame that is not canonical ECF** — `400 non_canonical_ecf` (`ENTITY-CORE-PROTOCOL.md` §4.7)
+2. **Refuse any CBOR tag in a data-field position** — §6.3, one member of the class in item 1
+3. Preserve additional map properties (§5.4 item 5)
 4. Reject duplicate map keys
 5. Validate UTF-8 in text strings
+
+**The boundary is where this binds `[MUST]`.** `ENTITY-CORE-PROTOCOL.md` §1.11 is the normative home: a conformant peer *"emits canonical conformant bytes at the boundary"* and *"accepts only canonical conformant bytes at the boundary"*, and MUST NOT *"accept any byte sequence at the boundary that is not canonical ECF."* Bytes that decode as valid CBOR but are not canonical — an indefinite length, a non-minimal integer, keys out of order, a tag on a data field — are refused; they are **not** accepted and re-encoded.
+
+**What a decoder MAY still do liberally is internal, and `ENTITY-CORE-PROTOCOL.md` §1.11 grants it directly.** An implementation may parse permissively, hold a non-CBOR representation, or use ECF features its own cluster understands, provided it owns the translation bridge and admits nothing non-canonical across the boundary. Liberality is an internal-architecture choice; admission is not.
+
+**Detection.** §10.3's rule is this refusal's mechanism, not an alternative to it: re-encode to ECF and **compare**, per §5.4's *(a)* precondition — *"receipt validation is a strict ECF re-encode-and-compare, so an accepted entity's canonical encoding provably equals its received bytes."* A difference is the non-canonical frame. Note that hash validation alone does **not** detect this: a sender that encodes non-canonically while computing its `content_hash` over the canonical form produces a hash that verifies.
+
+*(v1.8 — items 1 and 2 read "Accept any valid CBOR (not just deterministic)" and "Preserve unknown tags". Both are the pre-Option-B design: §6.3's own heading names the option that replaced tag preservation with rejection, and item 1 contradicted `ENTITY-CORE-PROTOCOL.md` §1.11(b) at `MUST` level in a section titled Decoder Requirements — the section an implementer reads when writing the decoder. Reported as `F21`, filed `disputed` because the corpus had no vector either way. The packet named §5.2 and §10.3 alongside this section; neither is in conflict — §5.2 is about what to hash and §10.3 is this refusal's detection mechanism — so the fork was between this section and §1.11 alone.)*
 
 ### 9.3 Hash Requirements
 
 Hash computation MUST:
 1. Extract the `type` and `data` fields
 2. Re-encode `{type, data}` to ECF (deterministic CBOR)
-3. Hash the ECF bytes (SHA-256 for format code 0x00)
-4. Format string as `ecfv1-sha256:<64 hex lowercase>`
-5. Wire encode as `0x00` + 32-byte digest
+3. Hash the ECF bytes with the digest function its `content_hash_format` code selects (§4.3)
+4. Format the display string as `<format-name>:<hex lowercase digest>` (§4.4)
+5. Wire encode as `varint(format_code) ‖ digest` (§4.5)
 
 **Hash validation:** Receivers MUST always verify claimed hashes by recomputing them. The claimed hash is untrusted until validated against the actual content.
 
@@ -862,7 +890,7 @@ Content-addressed storage implementations:
 
 ### 9.5 Interoperability Testing
 
-Implementations MUST pass the shared test vector suite (see Appendix A) before deployment.
+Implementations MUST pass the shared test vector suite before deployment. **The normative conformance contract is `Appendix E`**, whose fixture file this specification's header declares; Appendix A is an informative set of worked examples. *(v1.8 — this line pointed at Appendix A, which has not been the contract since Appendix E was written. Reported as part of `F25`.)*
 
 ---
 
@@ -1313,7 +1341,7 @@ The appendix covers two scopes:
 |---|---|---|
 | **`float`** | Rule 4 minimization (f16/f32/f64 boundaries); Rule 4a special floats (NaN, ±Inf, ±0, subnormal min). Initial seed: 14 vectors from Python's W2 verification battery — 4 large-magnitude parametrized + 7 small-magnitude specials + 3 non-f16-representable. The appendix may grow to add explicit subnormal vectors as Python's battery extends. | `encode_equal` |
 | **`int`** | Major-type-0/1 minimization at boundaries: 0, 23, 24, 255, 256, 65535, 65536, 2³¹, 2³²-1, 2³², 2⁶³-1, 2⁶³, and signed analogs (-1, -24, -25, -256, …). | `encode_equal` |
-| **`map_keys`** | RFC 8949 §4.2.1 deterministic key ordering: pure text keys, pure byte keys, mixed (text + byte) keys, large keys near length-prefix boundaries, identical-prefix keys. | `encode_equal` |
+| **`map_keys`** | **RFC 8949 §4.2.3 length-first** key ordering (§4.1 Rule 2) — **not** RFC 8949 §4.2.1's bytewise ordering, which this corpus does not use: pure text keys, pure byte keys, mixed (text + byte) keys, large keys near length-prefix boundaries, identical-prefix keys. **At least one vector MUST discriminate the two orderings** — its key set MUST sort differently under RFC 8949 §4.2.3 than under RFC 8949 §4.2.1, which requires two keys of different CBOR major types whose length order and head-byte order disagree (a short text key against a longer byte-string key is the minimal shape; `h'0000000000'` sorts *after* `"a"` under RFC 8949 §4.2.3 and *before* it under RFC 8949 §4.2.1). Pure-text vectors can never discriminate: a text head byte is monotonic in the string's length, so on that domain length-first is a refinement of bytewise rather than a different order. *(v1.8 — this cell cited RFC 8949 §4.2.1, which mandates the ordering the corpus does not use, in the one place a vector author reads. Library "canonical" modes split on exactly this axis — RFC 7049 canonical is length-first and conforms, RFC 8949 §4.2.1 core-deterministic is bytewise and does not — so an implementation that inherits the wrong one is silently non-conformant on mixed-type keys, and without a discriminating vector the corpus cannot fail it. Reported as `F22`, whose characterization of the RFC was checked and is correct.)* | `encode_equal` |
 | **`length`** | Definite vs indefinite encoding: arrays/maps/strings/bytes at length boundaries (0, 23, 24, 255, 256, 65535, 65536). Canonical MUST be definite-length; this category confirms the *absence* of indefinite-length output for any canonical input. | `encode_equal` |
 | **`primitive`** | bool, null, primitive boundaries; empty containers; mixed-primitive maps. | `encode_equal` |
 | **`nested`** | Composite shapes exercising deep nesting + mixed types: entities with `included` maps, hash-keyed maps, the `system/envelope` carrier shape. | `encode_equal` |
